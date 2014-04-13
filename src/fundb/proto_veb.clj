@@ -1,5 +1,5 @@
 (ns fundb.proto-veb
-  (:require [fundb.veb-utils :refer :all]))
+  (:require [fundb.proto-veb-utils :refer :all]))
 
 ;Introduction to algorithms
 ;This file describes the algorithms from 20.2 on proto-vEB structures

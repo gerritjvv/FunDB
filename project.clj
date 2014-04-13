@@ -3,4 +3,10 @@
   :url "https://github.com/gerritjvv/FunDB"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.5.1"]])
+  :dependencies [[org.clojure/clojure "1.5.1"]]
+
+  :javac-options ["-target" "1.6" "-source" "1.6" "-Xlint:-options"]
+  :global-vars {*warn-on-reflection* true
+                *assert* false}
+
+  :java-source-paths ["java"] )
