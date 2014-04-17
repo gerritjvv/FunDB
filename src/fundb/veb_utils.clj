@@ -1,5 +1,4 @@
-(ns fundb.veb-utils
-  (:import [fundb.utils MathUtils]))
+(ns fundb.veb-utils)
 
 
 
@@ -10,15 +9,15 @@
   [^long bits]
   (if (= bits 0) 0  (- 31 (Integer/numberOfLeadingZeros (int bits)))))
 
-(defn ^double veb-sqrt
+(defn veb-sqrt
   "Calculates the sqrt based on 2^([lg u]/2) where lg is base 2"
   [^long u]
   (Math/pow 2 (/ (log2-int u) 2)))
 
-(defn ^double lower-sqrt [u]
+(defn lower-sqrt [u]
    (Math/floor (veb-sqrt u)))
 
-(defn ^double upper-sqrt [u]
+(defn upper-sqrt [u]
    (Math/ceil (veb-sqrt u)))
 
 (defn high
