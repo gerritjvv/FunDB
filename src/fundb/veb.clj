@@ -18,7 +18,7 @@
 
 (defn veb-max
   "Returns the maximum for v and runs in constant time"
-  [v] (:max) v)
+  [v] (:max v))
 
 
  (defn member?
@@ -44,9 +44,9 @@
             max-low (veb-max (cluster x-high))
             x-low (low u x)]
         (if (and max-low (< x-low max-low))
-         (index x-high (successor (cluster x-high) x-low))
+         (index u x-high (successor (cluster x-high) x-low))
          (if-let [succ-cluster (successor summary x-high)]
-           (index succ-cluster (veb-min (cluster succ-cluster)))
+           (index u succ-cluster (veb-min (cluster succ-cluster)))
            nil))))))
 
  (defn predecessor
@@ -62,9 +62,9 @@
             min-low (veb-min (cluster x-high))
             x-low (low u x)]
         (if (and min-low (> x-low min-low))
-          (index x-high (predecessor (cluster x-high) x-low))
+          (index u x-high (predecessor (cluster x-high) x-low))
           (if-let [pred-cluster (predecessor summary x-high)]
-            (index pred-cluster (veb-max (cluster pred-cluster)))
+            (index u pred-cluster (veb-max (cluster pred-cluster)))
             (if (and min (> x min)) min nil)))))))
 
 
@@ -128,6 +128,9 @@
       (if (< x (veb-min v))
         (check-max (_insert (assoc v :min x) v-min) x)
         (check-max (_insert v x) x)))))
+
+(declare delete)
+
 
 
 
