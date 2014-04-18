@@ -69,3 +69,68 @@
 
 
 
+
+(declare insert)
+
+
+(defn create-root
+  "Create a root node"
+  [u]
+  {:u u :cluster {}})
+
+(defn- empty-insert
+  "Handles the different cases for inserting an empty node and creates to the currect attributes based on u"
+  [u v x]
+  (if (:u v)
+    (assoc v :min x :max x)
+    (let [u-root (upper-sqrt u)]
+      (if (> u-root 2)
+        {:u u-root :min x :max x :summary {:u (upper-sqrt u-root) :cluster {}} :cluster {}}
+        {:u u-root :min x :max x :cluster {}}))))
+
+
+(defn- check-max
+  "If the max is nil both the min and max values are set to x-low
+   if x is bigger than max x is set to max, otherwise v is returend as is"
+  [v x]
+  (let [v-max (:max v)]
+    (if (nil? v-max)
+      (assoc v :max x :min x)
+      (if (> x v-max)
+        (assoc v :max x) v))))
+
+(defn- get-summary
+  "Handles nil summary cases if the summary is nil a map of {:u (upper-sqrt u) :cluster {}} is returned
+   otherwise the summary is returned as is"
+  [u summary]
+  (if summary summary {:u (upper-sqrt u) :cluster {}}))
+
+
+(defn- _insert
+  "Helper function to insert, only inserts if u is bigger than 2 and returns the new modified tree"
+  [{:keys [u cluster summary] :as v} x]
+  (if (> u 2)
+    (let [x-high (high u x)
+          x-low (low u x)]
+      (if (nil? (veb-min (cluster x-high)))
+        (assoc v :summary (insert (get-summary u summary) x-high)
+          :cluster (assoc cluster x-high (empty-insert u (cluster x-high) x-low)))
+        (assoc-in v [:cluster x-high] (insert (cluster x-high) x-low))))
+    v))
+
+
+(defn insert
+  "Public function to call for inserting values, returns the modified node"
+  [v x]
+  (let [v-min (veb-min v)]
+    (if (nil? v-min)
+      (empty-insert (:u v) v x)
+      (if (< x (veb-min v))
+        (check-max (_insert (assoc v :min x) v-min) x)
+        (check-max (_insert v x) x)))))
+
+
+
+
+
+
