@@ -1,5 +1,6 @@
 (ns fundb.veb
-   (:require [fundb.veb-utils :refer :all]))
+  (:require [fundb.veb-utils :refer :all])
+  (:use [clojure.core :exclude [min max]]))
 
 ;
 ;The vEB tree structure is represented by nodes that each are represented by a map.
@@ -120,74 +121,75 @@
 
 
 (defn insert
-  "Public function to call for inserting values, returns the modified node"
+  "Public function to call for inserting values, returns the modified node
+   Runs in O(lg lg u)"
   [v x]
-  (let [v-min (veb-min v)]
-    (if (nil? v-min)
-      (empty-insert (:u v) v x)
-      (if (< x (veb-min v))
-        (check-max (_insert (assoc v :min x) v-min) x)
-        (check-max (_insert v x) x)))))
+  (if (not (member? v x))
+    (let [v-min (veb-min v)]
+      (if (nil? v-min)
+        (empty-insert (:u v) v x)
+        (if (< x (veb-min v))
+          (check-max (_insert (assoc v :min x) v-min) x)
+          (check-max (_insert v x) x))))
+    v))
 
 (declare delete)
 
-(defn- _delete-min [[{:keys [min summary cluster u] :as v} x]]
-  ;(prn "_delete-min x " x)
+(defn- _delete-min
+  "Called by delete and sets the min value"
+  [[{:keys [min summary cluster min max u] :as v} x]]
+
   (if (= x min)
     (let [first-cluster (veb-min summary)
           x2 (index u first-cluster (veb-min (cluster first-cluster)))]
-
-      ;problem here is that x2 can again equal the minimum. We have to recursively seach for the next minimum
-      ;using the successor
-      (if (= x2 min)
-        (let [x3 (successor v x2)]
-          [(assoc v :min x3) x2])
-        [(assoc v :min x2) x2]))
+      [(assoc v :min x2) x2])
     [v x]))
 
-(defn- _delete-x [[{:keys [cluster u] :as v} x]]
-  ;(prn "_delete-x " x)
-  (let [x-high (high u x)]
-    [(assoc-in v [:cluster x-high] (delete (cluster x-high) (low u x))) x]))
+(defn- _delete-x
+  "Called by delete and deletes x from v"
+  [[{:keys [cluster min max u] :as v} x]]
+  (let [x-high (high u x)
+        v2 (assoc-in v [:cluster x-high] (delete (cluster x-high) (low u x)))]
+    [v2 x]))
 
-(defn- _delete-calc-max [{:keys [summary cluster max min u] :as v} x]
-  (if (= x max)
-    (let [summary-max (veb-max summary)]
-      (if (or (nil? summary-max) (nil? (veb-max (cluster summary-max))))
-        min
-        (index u summary-max (veb-max (cluster summary-max)))))
-    max))
 
-(defn- _delete-max [[{:keys [cluster summary max u] :as v} x]]
-  (prn "_delete-max x " x)
-  (let [x-high (high u x)]
-    (if (nil? (veb-min (cluster x-high)))
-      (let [v2 (assoc v :summary (delete summary x-high))]
-        (if (= (:max v2) x)
-          (let [new-max (_delete-calc-max v2 x)]
-           [(assoc v2 :max (if (< new-max x) x new-max)) x]) ;enter here with v2
-          [v2 x]))
-       (if (= x max)
-         [(assoc v :max (index u x-high (veb-max (cluster x-high)))) x]
-         [v x]))))
-
+(defn- _delete-max
+  "Called by delete and sets the max value"
+  [[{:keys [cluster summary min max u] :as v} x]]
+  (if (nil? (veb-min (cluster (high u x))))
+    (let [summary2 (delete summary (high u x))
+          v2 (assoc v :summary summary2)]
+      (if (= x max)
+        (let [summary-max (veb-max summary2)]
+          (if (nil? summary-max)
+            [(assoc v2 :max min) x]
+            [(assoc v2 :max (index u summary-max (veb-max (cluster summary-max)))) x]))
+        [v2 x]))
+    (if (= x max)
+      (let [x-high (high u x)]
+        [(assoc v :max (index u x-high (veb-max (cluster x-high)))) x])
+      [v x])))
 
 
 
-(defn delete [{:keys [min max u] :as v} x]
-  ;(prn "delete min " min " max " max " x " x)
-  (if (or (< x min) (> x max))
+(defn delete
+  "Delete the member x from the tree v
+   Runs in O(lg lg u) time"
+  [{:keys [min max u] :as v} x]
+  (if (or (nil? u) (nil? min) (nil? max) (< x min) (> x max))
     v
     (cond
       (= min max) (assoc (dissoc v :min :max :summary) :cluster {})
       (= u 2) (let [min (if (= x 0) 1 0)]
-                (assoc v :min min :max max))
+                (assoc v :min min :max min))
       :else
       (-> [v x] _delete-min _delete-x _delete-max first))))
 
 
 
-(defn create-tree [u inserts]
+(defn create-tree
+  "Helper function to create a tree and applying n inserts i.e each element in inserts is inserted into a tree of size u"
+  [u inserts]
   (reduce (fn [tree i] (insert tree i)) (create-root u) inserts))
 
 
