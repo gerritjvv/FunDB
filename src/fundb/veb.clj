@@ -25,11 +25,13 @@
    "Returns true or false dependin if x is a member of v or any of its sub nodes
     Runs in O(lg lg u) time"
    [{:keys [u min max cluster] :as v} x]
-   (cond
-    (or (not v) (not x)) false ;check for null
-    (or (= min x) (= max x)) true
-    (= u 2) false
-    :else (recur (cluster (high u x)) (low u x) ))) ;recur into recursive call
+   (if u
+     (cond
+      (or (not v) (not x)) false ;check for null
+      (or (= min x) (= max x)) true
+      (= u 2) false
+      :else (recur (cluster (high u x)) (low u x) )) ;recur into recursive call
+     false))
 
  (defn successor
    "Finds the successor of x in v and its subnodes
@@ -66,8 +68,6 @@
           (if-let [pred-cluster (predecessor summary x-high)]
             (index u pred-cluster (veb-max (cluster pred-cluster)))
             (if (and min (> x min)) min nil)))))))
-
-
 
 
 (declare insert)
@@ -131,9 +131,64 @@
 
 (declare delete)
 
+(defn- _delete-min [[{:keys [min summary cluster u] :as v} x]]
+  ;(prn "_delete-min x " x)
+  (if (= x min)
+    (let [first-cluster (veb-min summary)
+          x2 (index u first-cluster (veb-min (cluster first-cluster)))]
+
+      ;problem here is that x2 can again equal the minimum. We have to recursively seach for the next minimum
+      ;using the successor
+      (if (= x2 min)
+        (let [x3 (successor v x2)]
+          [(assoc v :min x3) x2])
+        [(assoc v :min x2) x2]))
+    [v x]))
+
+(defn- _delete-x [[{:keys [cluster u] :as v} x]]
+  ;(prn "_delete-x " x)
+  (let [x-high (high u x)]
+    [(assoc-in v [:cluster x-high] (delete (cluster x-high) (low u x))) x]))
+
+(defn- _delete-calc-max [{:keys [summary cluster max min u] :as v} x]
+  (if (= x max)
+    (let [summary-max (veb-max summary)]
+      (if (or (nil? summary-max) (nil? (veb-max (cluster summary-max))))
+        min
+        (index u summary-max (veb-max (cluster summary-max)))))
+    max))
+
+(defn- _delete-max [[{:keys [cluster summary max u] :as v} x]]
+  (prn "_delete-max x " x)
+  (let [x-high (high u x)]
+    (if (nil? (veb-min (cluster x-high)))
+      (let [v2 (assoc v :summary (delete summary x-high))]
+        (if (= (:max v2) x)
+          (let [new-max (_delete-calc-max v2 x)]
+           [(assoc v2 :max (if (< new-max x) x new-max)) x]) ;enter here with v2
+          [v2 x]))
+       (if (= x max)
+         [(assoc v :max (index u x-high (veb-max (cluster x-high)))) x]
+         [v x]))))
 
 
 
+
+(defn delete [{:keys [min max u] :as v} x]
+  ;(prn "delete min " min " max " max " x " x)
+  (if (or (< x min) (> x max))
+    v
+    (cond
+      (= min max) (assoc (dissoc v :min :max :summary) :cluster {})
+      (= u 2) (let [min (if (= x 0) 1 0)]
+                (assoc v :min min :max max))
+      :else
+      (-> [v x] _delete-min _delete-x _delete-max first))))
+
+
+
+(defn create-tree [u inserts]
+  (reduce (fn [tree i] (insert tree i)) (create-root u) inserts))
 
 
 
