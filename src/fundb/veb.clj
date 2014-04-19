@@ -138,30 +138,37 @@
 (defn- _delete-min
   "Called by delete and sets the min value"
   [[{:keys [min summary cluster min max u] :as v} x]]
-
-  (if (= x min)
+  (if (and (not (empty? cluster)) (= x min) (veb-min (cluster (veb-min summary))))
     (let [first-cluster (veb-min summary)
           x2 (index u first-cluster (veb-min (cluster first-cluster)))]
       [(assoc v :min x2) x2])
     [v x]))
 
+(defn- _delete-clean-node [{:keys [min max] :as v}]
+  (if (and (nil? min) (nil? max))
+    nil
+    v))
+
 (defn- _delete-x
   "Called by delete and deletes x from v"
   [[{:keys [cluster min max u] :as v} x]]
   (let [x-high (high u x)
-        v2 (assoc-in v [:cluster x-high] (delete (cluster x-high) (low u x)))]
+        node (_delete-clean-node (delete (cluster x-high) (low u x)))
+        v2 (if node
+             (assoc-in v [:cluster x-high] node) ;remove empty nodes
+             (assoc v :cluster (dissoc cluster x-high)))]
     [v2 x]))
 
 
 (defn- _delete-max
   "Called by delete and sets the max value"
   [[{:keys [cluster summary min max u] :as v} x]]
-  (if (nil? (veb-min (cluster (high u x))))
-    (let [summary2 (delete summary (high u x))
+  (if (and cluster (nil? (veb-min (cluster (high u x)))))
+    (let [summary2 (_delete-clean-node (delete summary (high u x)))
           v2 (assoc v :summary summary2)]
       (if (= x max)
         (let [summary-max (veb-max summary2)]
-          (if (nil? summary-max)
+          (if (or (nil? summary-max) (nil? (veb-max (cluster summary-max))))
             [(assoc v2 :max min) x]
             [(assoc v2 :max (index u summary-max (veb-max (cluster summary-max)))) x]))
         [v2 x]))
@@ -176,10 +183,12 @@
   "Delete the member x from the tree v
    Runs in O(lg lg u) time"
   [{:keys [min max u] :as v} x]
-  (if (or (nil? u) (nil? min) (nil? max) (< x min) (> x max))
+
+  (if (or (nil? u) (nil? min) (nil? max) (< x min))
     v
     (cond
-      (= min max) (assoc (dissoc v :min :max :summary) :cluster {})
+      (= (:min v) (:max v))
+      (assoc (dissoc v :min :max :summary) :cluster {})
       (= u 2) (let [min (if (= x 0) 1 0)]
                 (assoc v :min min :max min))
       :else
