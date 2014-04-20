@@ -101,7 +101,7 @@
 
 
 (defspec delete-not-show-member
-  100
+  1000
   (prop/for-all [u-index (gen/such-that #(< % 27) gen/nat)]
                 (let [u (nth (powers-of-two 4) u-index)
                       r-seq (take 100 (filter #(< % u) (repeatedly (partial rand-int u))))
@@ -111,14 +111,10 @@
                             (do
                               (recur (insert v2 x) (rest s)))
                             v2))]
-                  (prn " u " u " " r-seq)
                   ;loop through each of the items in r-seq and test that it is a member of v
                   (loop [v2 v res true s r-seq]
                     (if res
                       (if-let [x (first s)]
-                        (let [
-                              _ (do (prn "delete u " u " x " x))
-                              v3 (delete v2 x)]
-                          (prn "is " x " member " (member? v3 x))
+                        (let [v3 (delete v2 x)]
                           (recur v3 (not (member? v3 x)) (rest s)))
                         res))))))
