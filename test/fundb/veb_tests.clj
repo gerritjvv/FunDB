@@ -16,25 +16,25 @@
                            (= (member? v x) false)
                            (= (member? v x) true)))))
 
-(defspec successor-base-case-0-1
+(defspec successor-v-base-case-0-1
   100
   (prop/for-all [v-init (gen/map (gen/elements [:min :max]) gen/nat)
                  x gen/nat]
                 (let [v (assoc {} :max {:v (:max v-init)} :min {:v (:min v-init)})
                       m (assoc v :u 2)
                       max (:max v-init)
-                      succ (successor m x)]
+                      succ (successor-v m x)]
                   (if (and (= max 1) (= x 0))
                     (= succ 1)
                     (nil? succ)))))
 
-(defspec successor-u-not-two-flat-always-nil
+(defspec successor-v-u-not-two-flat-always-nil
   10
   (prop/for-all [min gen/nat
                  max gen/nat
                  x gen/nat]
                 (let [m  {:u 5 :min {:v min} :max {:v max}}
-                      succ (successor m x)]
+                      succ (successor-v m x)]
                   (nil? succ))))
 
 

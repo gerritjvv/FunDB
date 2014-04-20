@@ -40,17 +40,22 @@
    [{:keys [u max min cluster summary] :as v} x]
    (if (or  (= u 2) (and cluster summary))
      (cond
-      (= u 2) (if (and (= 0 x) (= 1 (:v max))) 1 nil)
-      (and min (< x (:v min))) (:v min)
+      (= u 2) (if (and (= 0 x) (= 1 (:v max))) [1 max] nil)
+      (and min (< x (:v min))) [(:v min) min]
       :else
       (let [x-high (high u x)
             max-low (veb-max (cluster x-high))
             x-low (low u x)]
         (if (and max-low (< x-low max-low))
-         (index u x-high (successor (cluster x-high) x-low))
-         (if-let [succ-cluster (successor summary x-high)]
-           (index u succ-cluster (veb-min (cluster succ-cluster)))
+         (let [[succ-index data] (successor (cluster x-high) x-low)]
+           [(index u x-high succ-index) data])
+         (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
+           [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data]
            nil))))))
+
+ (defn successor-v [v x]
+   (first (successor v x)))
+
 
  (defn predecessor
    "Finds the predecessor of x in v and its subnodes
