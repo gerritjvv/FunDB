@@ -56,6 +56,13 @@
  (defn successor-v [v x]
    (first (successor v x)))
 
+ (defn veb-data
+   "Returns the data associated with x otherwise nil"
+   [v x]
+   (if-let [succ-data (successor v (dec x))]
+     (let [[succ-i data] succ-data]
+       (if (= succ-i x)
+         data))))
 
  (defn predecessor
    "Finds the predecessor of x in v and its subnodes
@@ -74,6 +81,19 @@
           (if-let [pred-cluster (predecessor summary x-high)]
             (index u pred-cluster (veb-max (cluster pred-cluster)))
             (if (and (:v min) (> x (:v min))) (:v min) nil)))))))
+
+(defn _veb-tree-seq [v start-x]
+  (lazy-seq
+          (if-let [succ (successor v start-x)]
+            (cons succ (_veb-tree-seq v (first succ))))))
+
+(defn veb-tree-seq
+  ([v] (veb-tree-seq v (veb-min v)))
+  ([v start-x]
+   (if (member? v start-x)
+     (cons (successor v (dec start-x)) (_veb-tree-seq v start-x))
+     (_veb-tree-seq v start-x))))
+
 
 
 (declare insert)
