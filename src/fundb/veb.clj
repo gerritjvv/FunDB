@@ -38,7 +38,7 @@
    "Finds the successor of x in v and its subnodes
     Runs in O(lg lg u) time"
    [{:keys [u max min cluster summary] :as v} x]
-   (if (or  (= u 2) (and cluster summary))
+   (if (or  (= u 2) (and cluster))
      (cond
       (= u 2) (if (and (= 0 x) (= 1 (:v max))) [1 max] nil)
       (and min (< x (:v min))) [(:v min) min]

@@ -1,6 +1,7 @@
 (ns fundb.storage
   (:require [fileape.core :refer :all]
-            [fundb.veb :refer [create-root insert]])
+            [fundb.veb :refer [create-root insert]]
+            [clojure.core.cache :as cache])
   (:import [java.io File DataOutputStream]))
 
 
@@ -41,35 +42,20 @@
 
 
 (defn file-roll-callback [db-name table-name {:keys [^File file]}]
-  (prn "rollback " table-name)
-  (try
-    (if-let [table (get-table db-name table-name)]
-      (let [file-name (.getAbsolutePath file)
-            {:keys [insert-data indexes]} table
-            {:keys [file-i]} (dosync (alter
-                                      insert-data
-                                      (fn [m]
-                                        (assoc m :file-i (inc (:file-i m)) (inc (:file-i m)) []))))
-            last-file-i (dec file-i)
-            file-keys (get @insert-data last-file-i)]
-        ;for each file-key insert each key into the indexes with data :file file-name :i i
-        (if (not (empty? file-keys))
-          (let
-            [new-indexes
-              (loop [ks file-keys i 0 ind @@indexes]
-                (if-let [k (first ks)]
-                  (do
-                    (recur (rest ks) (inc i) (insert ind k {:file file-name :i i})))
-                  ind))]
-
-            (dosync
-             (alter indexes (fn [_] (delay new-indexes)))
-             (alter insert-data dissoc last-file-i)))))
-      (prn "NO TABLE FOUND"))
-    (catch Exception e (.printStackTrace e))))
+  (prn "roll file " db-name " " table-name " " file))
 
 
+(defn- _get-index [ind]
+  (if (delay? ind) @ind ind))
 
+(defn get-index
+  "Returns the main index of a table, the index is a vEB tree"
+  [db-name table-name]
+  (_get-index @(get-in @databases [db-name :tables table-name :indexes])))
+
+
+(defn get-data-cache [db-name table-name]
+  (:data-cache (get-table db-name table-name)))
 
 (defn create-table [db-name table-name dir]
   (if-let [table (get-in @databases [db-name :tables table-name])]
@@ -83,26 +69,22 @@
                                            {:name table-name :dir (clojure.java.io/file dir)
                                             :indexes (ref (delay (create-table-indexes db-name table-name Long/MAX_VALUE)))
                                             :ape (delay (create-ape dir [(partial file-roll-callback db-name table-name)]))
-                                            :insert-data (ref {:file-i 0 0 [] })})))))
+                                            :data-cache (ref (cache/lru-cache-factory {})) ;used by the storage-read module
+                                            })))))
 
          [db-name :tables table-name])))
 
 
 (defn write-table [db-name table-name k ^"[B" bts]
   ;write data
-  (let [{:keys [insert-data ape]} (get-in @databases [db-name :tables table-name])]
+  (let [{:keys [ape indexes]} (get-in @databases [db-name :tables table-name])]
     (write @ape "data"
-           (fn [^DataOutputStream out]
-             (.write out (count bts))
-             (.write out bts 0 (count bts))))
-    (dosync
-     (alter insert-data
-            (fn [data]
-              ;file-i points to a vector, this vector contains the current keys to be inserted into the index
-              ;this delay to index writing is done because we only know the file name of the data once it has been rolled.
-              (let [file-i (:file-i data)
-                    data-vec (get data file-i)]
-                (assoc data file-i (conj data-vec k))))))))
+           (fn [{:keys [^DataOutputStream out future-file-name] :as file-data}]
+             (.writeInt out (count bts))
+             (.write out bts 0 (count bts))
+             (let [i (record-count file-data)]
+               (dosync (alter indexes (fn [ind]
+                                        (insert (_get-index ind) k {:file future-file-name :i i})))))))))
 
 
 
