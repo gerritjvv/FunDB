@@ -37,6 +37,6 @@
         ^ByteBuffer uncompressed-buff (ByteBuffer/allocateDirect (Snappy/uncompressedLength compressed-buff))]
     (Snappy/uncompress compressed-buff uncompressed-buff)
     (.position buff (+ pos size))
-
+    (.flip uncompressed-buff);reset the buffer position to 0 for reading
     uncompressed-buff))
 

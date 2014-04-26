@@ -42,21 +42,58 @@
     {:messages messages :file file}))
 
 (defn read-from-source [cache {:keys [file i]}]
+  (prn "read-from-source file : " file " i " i)
   (let [c (dosync
            (alter cache
                   (fn [m]
                     (cache/through (fn [_]
                                (load-file-array file)) m (str file)))))
-        file-array (cache/lookup c file)]))
+        {:keys [messages]} (cache/lookup c file)]
+    (get messages i)))
 
 
 
 
-
-(defn get-data [db-name table-name k]
+(defn get-data
+  "public function that gets a data value from a table indexed by k
+   returns a map e.g {:pos 4, :size 6, :i 0, :buff #<DirectByteBuffer java.nio.DirectByteBuffer[pos=218 lim=218 cap=218]>}
+   use des-bytes to get the actual value bytes"
+  [db-name table-name k]
   (let [ind (get-index db-name table-name)]
     (if-let [ data (veb/veb-data ind k)]
-      (read-from-source (get-data-cache db-name table-name) data))))
+      (read-from-source (get-data-cache db-name table-name) data)
+      (prn "no data found for key " k))))
+
+(defn ^"[B" des-bytes
+  "public helper function that reads the bytes from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))
+          arr (byte-array size)]
+      (.get temp-buff arr 0 size)
+      arr)))
 
 
+(defn ^Long des-int
+  "public helper function that reads the int from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.getInt temp-buff))))
 
+
+(defn ^Long des-long
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.getLong temp-buff))))
+
+(defn ^String des-str
+  "public helper function that reads a UTF-8 String from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [data]
+  (String. (des-bytes data) "UTF-8"))
