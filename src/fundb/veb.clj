@@ -38,7 +38,7 @@
    "Finds the successor of x in v and its subnodes
     Runs in O(lg lg u) time"
    [{:keys [u max min cluster summary] :as v} x]
-   (if (or  (= u 2) (and cluster))
+   (if true
      (cond
       (= u 2) (if (and (= 0 x) (= 1 (:v max))) [1 max] nil)
       (and min (< x (:v min))) [(:v min) min]
@@ -48,10 +48,13 @@
             x-low (low u x)]
         (if (and max-low (< x-low max-low))
          (let [[succ-index data] (successor (cluster x-high) x-low)]
-           [(index u x-high succ-index) data])
+           (if (not succ-index)
+             (do (prn "NIL HERE see what predecessor does ") nil)
+            [(index u x-high succ-index) data]))
          (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
            [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data]
            nil))))))
+
 
  (defn successor-v [v x]
    (first (successor v x)))
@@ -157,8 +160,9 @@
     (let [v-min (veb-min v)]
       (if (nil? v-min)
         (empty-insert (:u v) v x data)
-        (if (< x (veb-min v))
-          (check-max (_insert (assoc v :min (assoc data :v x)) v-min data) x)
+        (if (< x v-min)
+          ;we swap x and data with the minimum, and insert data = (:min v) v = v-min
+          (check-max (_insert (assoc v :min (assoc data :v x)) v-min (:min v)) x)
           (check-max (_insert v x data) x))))
     v))
 

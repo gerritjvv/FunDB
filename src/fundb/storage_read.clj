@@ -92,6 +92,59 @@
     (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
       (.getLong temp-buff))))
 
+
+(defn ^Double des-double
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.getDouble temp-buff))))
+
+
+(defn ^Float des-float
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.getFloat temp-buff))))
+
+
+(defn ^Byte des-byte
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.get temp-buff))))
+
+
+(defn des-short
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.getShort temp-buff))))
+
+
+(defn des-char
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (.getChar temp-buff))))
+
+(defn ^Boolean des-bool
+  "public helper function that reads the Long from a message, this function takes the ByteBuffer and reads the bytes into
+   a byte array copying the data into the Java Heap"
+  [{:keys [^ByteBuffer buff pos size]}]
+  (if buff
+    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))]
+      (= 1 (.getByte temp-buff)))))
+
 (defn ^String des-str
   "public helper function that reads a UTF-8 String from a message, this function takes the ByteBuffer and reads the bytes into
    a byte array copying the data into the Java Heap"

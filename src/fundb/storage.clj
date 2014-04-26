@@ -2,7 +2,8 @@
   (:require [fileape.core :refer :all]
             [fundb.veb :refer [create-root insert]]
             [clojure.core.cache :as cache])
-  (:import [java.io File DataOutputStream]))
+  (:import [java.io File DataOutputStream]
+           [java.util.concurrent.atomic AtomicLong]))
 
 
 (def databases (ref {}))
@@ -67,7 +68,8 @@
                                  m
                                  (assoc-in m [db-name :tables table-name]
                                            {:name table-name :dir (clojure.java.io/file dir)
-                                            :indexes (ref (delay (create-table-indexes db-name table-name Long/MAX_VALUE)))
+                                            :indexes (ref (delay (
+                                                                  create-table-indexes db-name table-name (long (Math/pow 2 47)))))
                                             :ape (delay (create-ape dir [(partial file-roll-callback db-name table-name)]))
                                             :data-cache (ref (cache/lru-cache-factory {})) ;used by the storage-read module
                                             })))))
@@ -82,7 +84,8 @@
            (fn [{:keys [^DataOutputStream out future-file-name] :as file-data}]
              (.writeInt out (count bts))
              (.write out bts 0 (count bts))
-             (let [i (record-count file-data)]
+             ;(prn "writing file data " (:record-counter file-data) " function " (record-count file-data) " file " future-file-name)
+             (let [i (.get ^AtomicLong (:record-counter file-data))]
                (dosync (alter indexes (fn [ind]
                                         (insert (_get-index ind) k {:file future-file-name :i i})))))))))
 
