@@ -49,11 +49,12 @@
         (if (and max-low (< x-low max-low))
          (let [[succ-index data] (successor (cluster x-high) x-low)]
            (if (not succ-index)
-             (do (prn "NIL HERE see what predecessor does ") nil)
+             (do (prn "NIL HERE see what predecessor does min: " min " x " x " succ-summ " (successor summary x-high)) nil)
             [(index u x-high succ-index) data]))
          (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
+          (do  (prn "succ-cluster-i " succ-cluster-i " cluster " cluster)
            [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data]
-           nil))))))
+           nil)))))))
 
 
  (defn successor-v [v x]
@@ -70,7 +71,8 @@
  (defn predecessor
    "Finds the predecessor of x in v and its subnodes
     Runs in O(lg lg u) time"
-   [{:keys [u min max cluster summary]} x]
+   [{:keys [u min max cluster summary] :as v} x]
+
    (if (or  (= u 2) (and cluster summary))
      (cond
       (= u 2) (if (and (= 1 x) (= (:v min) 0)) 0 nil)
@@ -122,9 +124,9 @@
 (defn- check-max
   "If the max is nil both the min and max values are set to x-low
    if x is bigger than max x is set to max, otherwise v is returend as is"
-  [v x]
+  [v x data]
   (let [v-max (:max v)
-        max-d (assoc v-max :v x)]
+        max-d (assoc data :v x)]
     (if (nil? (:v v-max))
       (assoc v :max max-d :min max-d)
       (if (> x (:v v-max))
@@ -162,8 +164,8 @@
         (empty-insert (:u v) v x data)
         (if (< x v-min)
           ;we swap x and data with the minimum, and insert data = (:min v) v = v-min
-          (check-max (_insert (assoc v :min (assoc data :v x)) v-min (:min v)) x)
-          (check-max (_insert v x data) x))))
+          (check-max (_insert (assoc v :min (assoc data :v x)) v-min (:min v)) x data)
+          (check-max (_insert v x data) x data))))
     v))
 
 
