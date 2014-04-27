@@ -46,15 +46,33 @@
       (let [x-high (high u x)
             max-low (veb-max (cluster x-high))
             x-low (low u x)]
-        (if (and max-low (< x-low max-low))
+        (cond
+         (and max-low (< x-low max-low))
          (let [[succ-index data] (successor (cluster x-high) x-low)]
            (if (not succ-index)
              (do (prn "NIL HERE see what predecessor does min: " min " x " x " succ-summ " (successor summary x-high)) nil)
             [(index u x-high succ-index) data]))
+         (and (= max-low x-low) (not= x (:v max)))
+         (do
+           (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
+             [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data]
+             (if-let [m (:min (:summary summary) )]
+               (let [vebmin (veb-min (cluster (:v m)))
+                     i (index u (:v m) vebmin)]
+                 (if (> i x)
+                   [(index u (:v m) vebmin) m]
+                   (let [m2 (:max (:summary summary))
+                         vebmin (veb-min (cluster (:v m2)))
+                         v (:min (cluster (:v m2)))]
+                      [(index u (:v m2) (low u (:v m2))) v]
+
+                     )))))
+           );need to find a better value here
+         :else
          (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
           (do  (prn "succ-cluster-i " succ-cluster-i " cluster " cluster)
-           [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data]
-           nil)))))))
+           [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data])
+           nil))))))
 
 
  (defn successor-v [v x]
