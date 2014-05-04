@@ -38,17 +38,18 @@
 (defn load-file-array [file]
   ; read the file and decompress
   ;read in each message and assign to position n a tuple [start-pos end-pos]
+  (prn ">>>>>>>>>>>>>>>>>>> Load file array " file)
   (let [messages (read-file file)]
     {:messages messages :file file}))
 
 (defn read-from-source [cache {:keys [file i]}]
-  (prn "read-from-source file : " file " i " i)
   (let [c (dosync
            (alter cache
                   (fn [m]
                     (cache/through (fn [_]
                                (load-file-array file)) m (str file)))))
         {:keys [messages]} (cache/lookup c file)]
+    (prn "messages " messages)
     (get messages i)))
 
 
@@ -62,7 +63,7 @@
   (let [ind (get-index db-name table-name)]
     (if-let [ data (veb/veb-data ind k)]
       (read-from-source (get-data-cache db-name table-name) data)
-      (prn "no data found for key " k))))
+      )))
 
 (defn ^"[B" des-bytes
   "public helper function that reads the bytes from a message, this function takes the ByteBuffer and reads the bytes into

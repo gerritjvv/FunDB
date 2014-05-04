@@ -69,7 +69,7 @@
                                  (assoc-in m [db-name :tables table-name]
                                            {:name table-name :dir (clojure.java.io/file dir)
                                             :indexes (ref (delay (
-                                                                  create-table-indexes db-name table-name (long (Math/pow 2 47)))))
+                                                                  create-table-indexes db-name table-name (long (Math/pow 2 32)))))
                                             :ape (delay (create-ape dir [(partial file-roll-callback db-name table-name)]))
                                             :data-cache (ref (cache/lru-cache-factory {})) ;used by the storage-read module
                                             })))))

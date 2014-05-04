@@ -38,41 +38,25 @@
    "Finds the successor of x in v and its subnodes
     Runs in O(lg lg u) time"
    [{:keys [u max min cluster summary] :as v} x]
-   (if true
-     (cond
-      (= u 2) (if (and (= 0 x) (= 1 (:v max))) [1 max] nil)
-      (and min (< x (:v min))) [(:v min) min]
-      :else
-      (let [x-high (high u x)
-            max-low (veb-max (cluster x-high))
-            x-low (low u x)]
-        (cond
-         (and max-low (< x-low max-low))
-         (let [[succ-index data] (successor (cluster x-high) x-low)]
-           (if (not succ-index)
-             (do (prn "NIL HERE see what predecessor does min: " min " x " x " succ-summ " (successor summary x-high)) nil)
-            [(index u x-high succ-index) data]))
-         (and (= max-low x-low) (not= x (:v max)))
-         (do
-           (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
-             [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data]
-             (if-let [m (:min (:summary summary) )]
-               (let [vebmin (veb-min (cluster (:v m)))
-                     i (index u (:v m) vebmin)]
-                 (if (> i x)
-                   [(index u (:v m) vebmin) m]
-                   (let [m2 (:max (:summary summary))
-                         vebmin (veb-min (cluster (:v m2)))
-                         v (:min (cluster (:v m2)))]
-                      [(index u (:v m2) (low u (:v m2))) v]
-
-                     )))))
-           );need to find a better value here
+   ;(prn "u " u " x " x " x-hig " (high u x) " low " (low u x) " v " v)
+   (cond
+         (= u 2)
+         (if (and (= x 0) (= (:v max) 1)) [1 max] nil)
+         (and (:v min) (< x (:v min)))
+         [(:v min) min]
          :else
-         (if-let [[succ-cluster-i succ-data] (successor summary x-high)]
-          (do  (prn "succ-cluster-i " succ-cluster-i " cluster " cluster)
-           [ (index u succ-cluster-i (veb-min (cluster succ-cluster-i))) succ-data])
-           nil))))))
+         (let [x-high (high u x)
+               x-low (low u x)
+               max-low (veb-max (get cluster x-high))]
+           (if (and max-low (< x-low max-low))
+             (let [[succ-i data2] (successor (cluster x-high) x-low)]
+               ;(prn "x-high " x-high  " x " x " succ-i " succ-i   " u " u " x-high " x-high " v " v)
+               [(index u x-high succ-i) data2])
+             (let [[succ-cluster data] (do  (prn "summary " summary " x-high " x-high " x " x)
+                                  (successor summary x-high))]
+               (if (not succ-cluster)
+                 nil
+                 [(index u succ-cluster (veb-min (cluster succ-cluster))) data]  ))))))
 
 
  (defn successor-v [v x]
@@ -136,56 +120,58 @@
           data-m (assoc data :v x)]
       (if (> u-root 2)
         {:u u-root :min data-m :max data-m :summary {:u (upper-sqrt u-root) :cluster {}} :cluster {}}
-        {:u u-root :min data-m :max data-m :cluster {}}))))
+        {:u u-root :min data-m :max data-m}))))
 
+(defn- add-to-cluster [v x cx]
+  (assoc-in v [:cluster x] cx))
 
-(defn- check-max
-  "If the max is nil both the min and max values are set to x-low
-   if x is bigger than max x is set to max, otherwise v is returend as is"
-  [v x data]
-  (let [v-max (:max v)
-        max-d (assoc data :v x)]
-    (if (nil? (:v v-max))
-      (assoc v :max max-d :min max-d)
-      (if (> x (:v v-max))
-        (assoc v :max max-d) v))))
+(defn- get-summary [v]
+  (if-let [s (:summary v)]
+    s
+    {:u (upper-sqrt (:u v)) :min nil :max nil}))
 
-(defn- get-summary
-  "Handles nil summary cases if the summary is nil a map of {:u (upper-sqrt u) :cluster {}} is returned
-   otherwise the summary is returned as is"
-  [u summary]
-  (if summary summary {:u (upper-sqrt u) :cluster {}}))
+(defn- add-summary [v x data]
+  ;(prn "add summary" (get-summary v)  " x " x)
+  (assoc v :summary (insert (get-summary v) x data)))
 
-
-(defn- _insert
-  "Helper function to insert, only inserts if u is bigger than 2 and returns the new modified tree"
-  [{:keys [u cluster summary] :as v} x data]
-  (if (> u 2)
-    (let [x-high (high u x)
-          x-low (low u x)]
-      (if (nil? (veb-min (cluster x-high)))
-        (assoc v :summary (insert (get-summary u summary) x-high data)
-          :cluster (assoc cluster x-high (empty-insert u (cluster x-high) x-low data)))
-        (assoc-in v [:cluster x-high] (insert (cluster x-high) x-low data))))
+(defn- check-max [{:keys [max] :as v} x data]
+  (if (> x (:v max))
+    (assoc v :max (assoc data :v x))
     v))
 
 
-(defn insert
-  "Public function to call for inserting values, returns the modified node
-   Runs in O(lg lg u)
+(defn- get-cluster [v x data]
+  (if-let [c (get-in v [:cluster x])]
+    c
+    {:u (upper-sqrt (:u v)) :min nil :max :nil}))
 
-  data must be a map"
-  [v x data]
-  (if (not (member? v x))
-    (let [v-min (veb-min v)]
-      (if (nil? v-min)
-        (empty-insert (:u v) v x data)
-        (if (< x v-min)
-          ;we swap x and data with the minimum, and insert data = (:min v) v = v-min
-          (check-max (_insert (assoc v :min (assoc data :v x)) v-min (:min v)) x data)
-          (check-max (_insert v x data) x data))))
-    v))
+(defn- exhange-x-with-min [{:keys [min] :as v} x data]
+  (let [v2 (assoc v :min (assoc data :v x))]
+    (insert v2 (:v min) (dissoc min :v))))
 
+(defn insert [{:keys [u min] :as v} x data]
+  ;(prn "insert :u " u " x " (veb-min v))
+  (if (veb-min v)
+    ;put in here if x < v.min exhange x with v.min
+    (cond
+     (< x (:v min))
+     (exhange-x-with-min v x data)
+     (> u 2)
+     (let [x-high (high u x)
+            x-low (low u x)
+            c (get-cluster v x-high data)]
+        (if (veb-min (get-in v [:cluster x-high]))
+          (->
+           v
+           (add-to-cluster x-high (insert c x-low data))
+           (check-max x data))
+          (->
+           v
+           (add-summary x-high data)
+           (add-to-cluster x-high (insert c x-low data))
+           (check-max x data))))
+      :else (check-max v x data))
+    (empty-insert u v x data)))
 
 
 (defn create-tree
