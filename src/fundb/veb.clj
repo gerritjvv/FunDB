@@ -2,7 +2,7 @@
   (:require [fundb.veb-utils :refer :all])
   (:use [clojure.core :exclude [min max]]))
 
-;
+;IMPORTANT: only works for u values 2^4, 2^24 and 2^32
 ;The vEB tree structure is represented by nodes that each are represented by a map.
 ;The keys for the map are:
 ;u ;the universe size
