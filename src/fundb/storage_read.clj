@@ -24,10 +24,12 @@
         ^MappedByteBuffer source-bb (.map ch FileChannel$MapMode/READ_ONLY 0 (.size ch))]
     (try
       (let [header (sn-util/read-header source-bb)]
-        (prn "header " header " header bytes : " (map str (:magic-header header)))
         (loop [state [] i 0]
           (if (> (.remaining source-bb) 0)
-            (let [[messages pos] (sn-util/read-message-meta (sn-util/read-snappy-block source-bb) state i)]
+            (let [
+                  snappy-block (sn-util/read-snappy-block source-bb)
+
+                  [messages pos] (sn-util/read-message-meta snappy-block state i)]
               (recur (into state messages) (long pos)))
             state)))
       (finally
@@ -38,7 +40,6 @@
 (defn load-file-array [file]
   ; read the file and decompress
   ;read in each message and assign to position n a tuple [start-pos end-pos]
-  (prn ">>>>>>>>>>>>>>>>>>> Load file array " file)
   (let [messages (read-file file)]
     {:messages messages :file file}))
 
@@ -49,7 +50,6 @@
                     (cache/through (fn [_]
                                (load-file-array file)) m (str file)))))
         {:keys [messages]} (cache/lookup c file)]
-    (prn "messages " messages)
     (get messages i)))
 
 
@@ -62,6 +62,7 @@
   [db-name table-name k]
   (let [ind (get-index db-name table-name)]
     (if-let [ data (veb/veb-data ind k)]
+
       (read-from-source (get-data-cache db-name table-name) data)
       )))
 

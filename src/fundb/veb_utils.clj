@@ -1,6 +1,13 @@
 (ns fundb.veb-utils)
 
 
+(defn- perfect-square? [x]
+  (let [root (Math/floor (Math/pow x 0.5))]
+    (= (* root root) x)))
+
+(defn fib? [x]
+  (or (perfect-square? (+ (* x x 5) 4)) (perfect-square? (- (* x x 5) 4))))
+
 
 ;constants for log 2 calculations
 (defonce log2 (Math/log 2))
