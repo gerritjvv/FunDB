@@ -38,8 +38,8 @@
    "Finds the successor of x in v and its subnodes
     Runs in O(lg lg u) time"
    [{:keys [u max min cluster summary] :as v} x]
-   ;(prn "u " u " x " x " x-hig " (high u x) " low " (low u x) " v " v)
    (cond
+         (not u) nil
          (= u 2)
          (if (and (= x 0) (= (:v max) 1)) [1 max] nil)
          (and (:v min) (< x (:v min)))
@@ -52,8 +52,8 @@
              (let [[succ-i data2] (successor (cluster x-high) x-low)]
                ;(prn "x-high " x-high  " x " x " succ-i " succ-i   " u " u " x-high " x-high " v " v)
                [(index u x-high succ-i) data2])
-             (let [[succ-cluster data] (do  (prn "summary " summary " x-high " x-high " x " x)
-                                  (successor summary x-high))]
+             (let [[succ-cluster data]
+                   (successor summary x-high)]
                (if (not succ-cluster)
                  nil
                  [(index u succ-cluster (veb-min (cluster succ-cluster))) data]  ))))))
@@ -83,10 +83,6 @@
          m))))
 
 
- (defn veb-data
-   "Returns the data associated with x otherwise nil"
-   [v x]
-   )
 
  (defn predecessor
    "Finds the predecessor of x in v and its subnodes
@@ -115,9 +111,8 @@
 (defn veb-tree-seq
   ([v] (veb-tree-seq v (veb-min v)))
   ([v start-x]
-   (if (member? v start-x)
-     (cons (successor v (dec start-x)) (_veb-tree-seq v start-x))
-     (_veb-tree-seq v start-x))))
+   (if-let [succ (successor v start-x)]
+     (lazy-seq (cons (second succ) (veb-tree-seq v (first succ)))))))
 
 
 

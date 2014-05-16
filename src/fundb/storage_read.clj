@@ -73,10 +73,17 @@
    use des-bytes to get the actual value bytes"
   [db-name table-name k]
   (let [ind (get-index db-name table-name)]
-    (if-let [ data (veb/veb-data ind k)]
+    (if-let [ data (veb/find-data ind k)]
 
       (read-from-source (get-data-cache db-name table-name) data)
       )))
+
+(defn data-seq
+  "Returns a lazy sequence of data like a data scan"
+  ([db-name table-name]
+   (veb/veb-tree-seq (map (partial read-from-source (get-data-cache db-name table-name)) (get-index db-name table-name))))
+  ([db-name table-name start-x]
+   (veb/veb-tree-seq (map (partial read-from-source (get-data-cache db-name table-name)) (get-index db-name table-name) start-x))))
 
 
 (defn ^"[B" des-bytes
