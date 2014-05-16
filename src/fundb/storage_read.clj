@@ -3,7 +3,8 @@
   (:require [fundb.storage :refer [get-table get-index get-data-cache]]
             [fundb.veb :as veb]
             [fundb.snappy.core :as sn-util]
-            [clojure.core.cache :as cache])
+            [clojure.core.cache :as cache]
+            [clojure.core.reducers :as r])
   (:import  [java.io RandomAccessFile]
             [java.nio ByteBuffer MappedByteBuffer]
             [java.nio.channels FileChannel FileChannel$MapMode]
@@ -78,13 +79,27 @@
       (read-from-source (get-data-cache db-name table-name) data)
       )))
 
-(defn data-seq
-  "Returns a lazy sequence of data like a data scan"
-  ([db-name table-name]
-   (veb/veb-tree-seq (map (partial read-from-source (get-data-cache db-name table-name)) (get-index db-name table-name))))
-  ([db-name table-name start-x]
-   (veb/veb-tree-seq (map (partial read-from-source (get-data-cache db-name table-name)) (get-index db-name table-name) start-x))))
+(defn data-min [db-name table-name]
+  (veb/veb-min (get-index db-name table-name)))
 
+
+(defn data-max [db-name table-name]
+  (veb/veb-max (get-index db-name table-name)))
+
+
+(defn _data-seq
+  "Returns a lazy sequence of data like a data scan"
+  ([db-name table-name start-x]
+   (if-let [succ (veb/successor (get-index db-name table-name) start-x)]
+     (lazy-seq (cons (second succ) (_data-seq db-name table-name (first succ)))))))
+
+
+(defn data-seq
+  ([db-name table-name]
+   (data-seq db-name table-name (data-min db-name table-name)))
+  ([db-name table-name start-x]
+  (map (partial read-from-source (get-data-cache db-name table-name))
+         (_data-seq db-name table-name start-x))))
 
 (defn ^"[B" des-bytes
   "public helper function that reads the bytes from a message, this function takes the ByteBuffer and reads the bytes into
