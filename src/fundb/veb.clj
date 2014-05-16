@@ -62,13 +62,31 @@
  (defn successor-v [v x]
    (first (successor v x)))
 
+
+ (defn find-data
+   "Find a key and its data using log log u time"
+   [{:keys [u min max cluster summary] :as m} x]
+
+   (cond
+    (or (< x (:v min)) (> x (:v max)))
+     nil
+    (= x (:v min))
+     min
+    (= x (:v max))
+     max
+    :ele
+     (let [x-high (high u x)
+           x-low (low u x)
+           c (cluster x-high)]
+       (if c
+         (find-data c x-low)
+         m))))
+
+
  (defn veb-data
    "Returns the data associated with x otherwise nil"
    [v x]
-   (if-let [succ-data (successor v (dec x))]
-     (let [[succ-i data] succ-data]
-       (if (= succ-i x)
-         data))))
+   )
 
  (defn predecessor
    "Finds the predecessor of x in v and its subnodes

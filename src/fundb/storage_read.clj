@@ -14,6 +14,18 @@
 ;cached data, all data for files are cached during the first read,
 ;
 
+(defn
+  read-file-compressed-block
+  "Read and uncompress the file and return a vector of messages of type map with keys pos, size, i, buff"
+  [file]
+  (let [^RandomAccessFile raf (RandomAccessFile. (clojure.java.io/file file) "r")
+        ^FileChannel ch (.getChannel raf)
+        ^MappedByteBuffer source-bb (.map ch FileChannel$MapMode/READ_ONLY 0 (.size ch))]
+    (try
+      (let [header (sn-util/read-header source-bb)]
+        (sn-util/read-snappy-block source-bb)))))
+
+
 
 (defn
   read-file
@@ -66,16 +78,14 @@
       (read-from-source (get-data-cache db-name table-name) data)
       )))
 
+
 (defn ^"[B" des-bytes
   "public helper function that reads the bytes from a message, this function takes the ByteBuffer and reads the bytes into
    a byte array copying the data into the Java Heap"
-  [{:keys [^ByteBuffer buff pos size]}]
-  (if buff
-    (let [^ByteBuffer temp-buff (doto (.slice buff) (.position (int pos)) (.limit (+ pos size)))
-          arr (byte-array size)]
-      (.get temp-buff arr 0 size)
-      arr)))
-
+   [{:keys [pos size ^ByteBuffer buff]}]
+    (let [bt (byte-array size)]
+      (.get (doto buff .slice (.position (int pos))) bt 0 (int size))
+      bt))
 
 (defn ^Long des-int
   "public helper function that reads the int from a message, this function takes the ByteBuffer and reads the bytes into

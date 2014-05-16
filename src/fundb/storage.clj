@@ -84,6 +84,7 @@
            (fn [{:keys [^DataOutputStream out future-file-name] :as file-data}]
              (.writeInt out (count bts))
              (.write out bts 0 (count bts))
+             (prn "wrote : " (String. bts))
              ;(prn "writing file data " (:record-counter file-data) " function " (record-count file-data) " file " future-file-name)
              (let [i (.get ^AtomicLong (:record-counter file-data))]
                (dosync (alter indexes (fn [ind]
