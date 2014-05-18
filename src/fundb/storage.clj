@@ -1,6 +1,7 @@
 (ns fundb.storage
   (:require [fileape.core :refer :all]
             [fundb.veb :refer [create-root insert]]
+            [fundb.converters :refer [to-bytearray]]
             [io.netty.buffer ByteBuf PooledByteBufAllocator ByteBufAllocator]
             [clojure.core.cache :as cache])
   (:import [java.io File DataOutputStream]
@@ -83,9 +84,10 @@
 ; If byte array backed, just use the array,
 ; else copy the data into an array of bytes and then write
 
-(defn write-table [db-name table-name k ^"[B" bts]
+(defn write-table [db-name table-name k v]
   ;write data
-  (let [{:keys [ape indexes]} (get-in @databases [db-name :tables table-name])]
+  (let [{:keys [ape indexes]} (get-in @databases [db-name :tables table-name])
+        ^"[B" bts (to-bytearray v)]
     (write @ape "data"
            (fn [{:keys [^DataOutputStream out future-file-name] :as file-data}]
              (.writeInt out (count bts))
