@@ -7,6 +7,7 @@
  		             [fileape "0.5.0-SNAPSHOT"]
                  [org.clojure/core.cache "0.6.3"]
                  [org.apache.hadoop/hadoop-common "2.2.0"]
+                 [io.netty/netty-buffer "4.0.19.Final"]
                  [org.clojure/test.check "0.5.7" :scope "test"]
 		 [org.clojure/tools.trace "0.7.8" :scope "provided"]]
 

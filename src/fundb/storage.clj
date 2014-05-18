@@ -1,6 +1,7 @@
 (ns fundb.storage
   (:require [fileape.core :refer :all]
             [fundb.veb :refer [create-root insert]]
+            [io.netty.buffer ByteBuf PooledByteBufAllocator ByteBufAllocator]
             [clojure.core.cache :as cache])
   (:import [java.io File DataOutputStream]
            [java.util.concurrent.atomic AtomicLong]))
@@ -72,10 +73,15 @@
                                                                   create-table-indexes db-name table-name (long (Math/pow 2 32)))))
                                             :ape (delay (create-ape dir [(partial file-roll-callback db-name table-name)]))
                                             :data-cache (ref (cache/lru-cache-factory {})) ;used by the storage-read module
+                                            :allocator (PooledByteBufAllocator. true)
                                             })))))
 
          [db-name :tables table-name])))
 
+
+;TODO use ByteBuf and then to write to the DataOutputStream do
+; If byte array backed, just use the array,
+; else copy the data into an array of bytes and then write
 
 (defn write-table [db-name table-name k ^"[B" bts]
   ;write data

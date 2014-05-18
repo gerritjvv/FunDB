@@ -7,6 +7,7 @@
             [clojure.core.reducers :as r])
   (:import  [java.io RandomAccessFile]
             [java.nio ByteBuffer MappedByteBuffer]
+            [io.netty.buffer ByteBuf  ByteBufAllocator]
             [java.nio.channels FileChannel FileChannel$MapMode]
             [org.xerial.snappy Snappy SnappyCodec]))
 
