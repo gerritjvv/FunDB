@@ -1,6 +1,7 @@
 (ns fundb.converters
   (:import
    [io.netty.buffer ByteBuf Unpooled]
+   [fundb.utils BytesUtil]
    [java.nio ByteBuffer]))
 
 (defprotocol TComparable
@@ -65,6 +66,23 @@
 
   ToByteArray
   (to-bytearray [x] x))
+
+(extend-type java.lang.Long
+
+  TComparable
+  (compareTo [a b] (compareTo (to-bytebuf a) (to-bytebuf b)))
+
+  ToByteBuf
+  (to-bytebuf [x] (to-bytebuf (to-bytearray x)))
+
+  ToByteBuffer
+  (to-bytebuffer [x] (to-bytebuffer (to-bytearray x)))
+
+  ToByteArray
+  (to-bytearray [x] (BytesUtil/toArray (long x))))
+
+
+
 
 
 

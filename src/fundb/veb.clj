@@ -1,5 +1,6 @@
 (ns fundb.veb
-  (:require [fundb.veb-utils :refer :all])
+  (:require [fundb.veb-utils :refer :all]
+            [fundb.hashes :refer [o-hash]])
   (:use [clojure.core :exclude [min max]]))
 
 ;IMPORTANT: only works for u values 2^4, 2^24 and 2^32
@@ -116,7 +117,7 @@
 
 
 
-(declare insert)
+(declare insert1)
 
 
 (defn create-root
@@ -145,7 +146,7 @@
 
 (defn- add-summary [v x data]
   ;(prn "add summary" (get-summary v)  " x " x)
-  (assoc v :summary (insert (get-summary v) x data)))
+  (assoc v :summary (insert1 (get-summary v) x data)))
 
 (defn- check-max [{:keys [max] :as v} x data]
   (if (> x (:v max))
@@ -160,12 +161,10 @@
 
 (defn- exhange-x-with-min [{:keys [min] :as v} x data]
   (let [v2 (assoc v :min (assoc data :v x))]
-    (insert v2 (:v min) (dissoc min :v))))
+    (insert1 v2 (:v min) (dissoc min :v))))
 
-(defn insert [{:keys [u min] :as v} x data]
-  ;(prn "insert :u " u " x " (veb-min v))
+(defn insert1 [{:keys [u min] :as v} x data]
   (if (veb-min v)
-    ;put in here if x < v.min exhange x with v.min
     (cond
      (< x (:v min))
      (exhange-x-with-min v x data)
@@ -176,15 +175,24 @@
         (if (veb-min (get-in v [:cluster x-high]))
           (->
            v
-           (add-to-cluster x-high (insert c x-low data))
+           (add-to-cluster x-high (insert1 c x-low data))
            (check-max x data))
           (->
            v
            (add-summary x-high data)
-           (add-to-cluster x-high (insert c x-low data))
+           (add-to-cluster x-high (insert1 c x-low data))
            (check-max x data))))
       :else (check-max v x data))
     (empty-insert u v x data)))
+
+(defn insert
+  "v must be a vEB node
+   k must be of type String, Integer or Number
+   data must be a map
+    The order preserving hash of k is used as the internal key, and :keys #{k} is assoced to data.
+  "
+  [v k data]
+  (insert1 v (o-hash k) (assoc data :keys #{k} )))
 
 
 (defn create-tree

@@ -1,7 +1,7 @@
 (ns fundb.storage
   (:require [fileape.core :refer :all]
             [fundb.veb :refer [create-root insert]]
-            [fundb.converters :refer [to-bytearray]]
+            [fundb.converters :refer [to-bytearray to-bytebuf]]
             [io.netty.buffer ByteBuf PooledByteBufAllocator ByteBufAllocator]
             [clojure.core.cache :as cache])
   (:import [java.io File DataOutputStream]
@@ -60,7 +60,7 @@
 (defn get-data-cache [db-name table-name]
   (:data-cache (get-table db-name table-name)))
 
-(defn create-table [db-name table-name dir]
+(defn create-table [db-name table-name dir & {:keys [read-cache-limit] :or {read-cache-limit 32}}]
   (if-let [table (get-in @databases [db-name :tables table-name])]
       table
       (get-in
@@ -71,9 +71,9 @@
                                  (assoc-in m [db-name :tables table-name]
                                            {:name table-name :dir (clojure.java.io/file dir)
                                             :indexes (ref (delay (
-                                                                  create-table-indexes db-name table-name (long (Math/pow 2 32)))))
+                                                                  create-table-indexes db-name table-name (long (Math/pow 2 47)))))
                                             :ape (delay (create-ape dir [(partial file-roll-callback db-name table-name)]))
-                                            :data-cache (ref (cache/lru-cache-factory {})) ;used by the storage-read module
+                                            :data-cache (ref (cache/lru-cache-factory {:threshold read-cache-limit})) ;used by the storage-read module
                                             :allocator (PooledByteBufAllocator. true)
                                             })))))
 
@@ -92,8 +92,6 @@
            (fn [{:keys [^DataOutputStream out future-file-name] :as file-data}]
              (.writeInt out (count bts))
              (.write out bts 0 (count bts))
-             (prn "wrote : " (String. bts))
-             ;(prn "writing file data " (:record-counter file-data) " function " (record-count file-data) " file " future-file-name)
              (let [i (.get ^AtomicLong (:record-counter file-data))]
                (dosync (alter indexes (fn [ind]
                                         (insert (_get-index ind) k {:file future-file-name :i i})))))))))
