@@ -51,7 +51,7 @@
                max-low (veb-max (get cluster x-high))]
            (if (and max-low (< x-low max-low))
              (let [[succ-i data2] (successor (cluster x-high) x-low)]
-               ;(prn "x-high " x-high  " x " x " succ-i " succ-i   " u " u " x-high " x-high " v " v)
+               (prn "x-high " x-high  " x " x " succ-i " succ-i   " u " u " x-high " x-high " v " v)
                [(index u x-high succ-i) data2])
              (let [[succ-cluster data]
                    (successor summary x-high)]

@@ -2,9 +2,9 @@
   (:require [fileape.core :refer :all]
             [fundb.veb :refer [create-root insert]]
             [fundb.converters :refer [to-bytearray to-bytebuf]]
-            [io.netty.buffer ByteBuf PooledByteBufAllocator ByteBufAllocator]
             [clojure.core.cache :as cache])
   (:import [java.io File DataOutputStream]
+           [io.netty.buffer ByteBuf PooledByteBufAllocator ByteBufAllocator]
            [java.util.concurrent.atomic AtomicLong]))
 
 
