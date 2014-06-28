@@ -1,15 +1,15 @@
 (ns fundb.storage-read
 
-  (:require [fundb.storage :refer [get-table get-index get-data-cache]]
+  (:require [fundb.storage :refer [get-table get-primary-index get-data-cache]]
             [fundb.veb :as veb]
             [fundb.snappy.core :as sn-util]
             [clojure.core.cache :as cache]
             [clojure.core.reducers :as r])
-  (:import  [java.io RandomAccessFile]
-            [java.nio ByteBuffer MappedByteBuffer]
-            [io.netty.buffer ByteBuf  ByteBufAllocator]
-            [java.nio.channels FileChannel FileChannel$MapMode]
-            [org.xerial.snappy Snappy SnappyCodec]))
+  (:import [java.io RandomAccessFile]
+           [java.nio ByteBuffer MappedByteBuffer]
+           [io.netty.buffer ByteBuf ByteBufAllocator]
+           [java.nio.channels FileChannel FileChannel$MapMode]
+           [org.xerial.snappy Snappy SnappyCodec]))
 
 ;module related to reading data from tables
 
@@ -41,14 +41,14 @@
         (loop [state [] i 0]
           (if (> (.remaining source-bb) 0)
             (let [
-                  snappy-block (sn-util/read-snappy-block source-bb)
+                   snappy-block (sn-util/read-snappy-block source-bb)
 
-                  [messages pos] (sn-util/read-message-meta snappy-block state i)]
+                   [messages pos] (sn-util/read-message-meta snappy-block state i)]
               (recur (into state messages) (long pos)))
             state)))
       (finally
-       (.close ch)
-       (.close raf)))))
+        (.close ch)
+        (.close raf)))))
 
 
 (defn load-file-array [file]
@@ -59,10 +59,10 @@
 
 (defn read-from-source [cache {:keys [file i]}]
   (let [c (dosync
-           (alter cache
-                  (fn [m]
-                    (cache/through (fn [_]
-                               (load-file-array file)) m (str file)))))
+            (alter cache
+                   (fn [m]
+                     (cache/through (fn [_]
+                                      (load-file-array file)) m (str file)))))
         {:keys [messages]} (cache/lookup c file)]
     (get messages i)))
 
@@ -74,24 +74,24 @@
    returns a map e.g {:pos 4, :size 6, :i 0, :buff #<DirectByteBuffer java.nio.DirectByteBuffer[pos=218 lim=218 cap=218]>}
    use des-bytes to get the actual value bytes"
   [db-name table-name k]
-  (let [ind (get-index db-name table-name)]
-    (if-let [ data (veb/find-data ind k)]
+  (let [ind (get-primary-index db-name table-name)]
+    (if-let [data (veb/find-data (:data ind) k)]
 
       (read-from-source (get-data-cache db-name table-name) data)
       )))
 
 (defn data-min [db-name table-name]
-  (veb/veb-min (get-index db-name table-name)))
+  (veb/veb-min (:data (get-primary-index db-name table-name))))
 
 
 (defn data-max [db-name table-name]
-  (veb/veb-max (get-index db-name table-name)))
+  (veb/veb-max (:data (get-primary-index db-name table-name))))
 
 
 (defn _data-seq
   "Returns a lazy sequence of data like a data scan"
   ([db-name table-name start-x]
-   (if-let [succ (veb/successor (get-index db-name table-name) start-x)]
+   (if-let [succ (veb/successor (:data (get-primary-index db-name table-name)) start-x)]
      (lazy-seq (cons (second succ) (_data-seq db-name table-name (first succ)))))))
 
 
@@ -99,16 +99,16 @@
   ([db-name table-name]
    (data-seq db-name table-name (data-min db-name table-name)))
   ([db-name table-name start-x]
-  (map (partial read-from-source (get-data-cache db-name table-name))
-         (_data-seq db-name table-name start-x))))
+   (map (partial read-from-source (get-data-cache db-name table-name))
+        (_data-seq db-name table-name start-x))))
 
 (defn ^"[B" des-bytes
   "public helper function that reads the bytes from a message, this function takes the ByteBuffer and reads the bytes into
    a byte array copying the data into the Java Heap"
-   [{:keys [pos size ^ByteBuffer buff]}]
-    (let [bt (byte-array size)]
-      (.get (doto buff .slice (.position (int pos))) bt 0 (int size))
-      bt))
+  [{:keys [pos size ^ByteBuffer buff]}]
+  (let [bt (byte-array size)]
+    (.get (doto buff .slice (.position (int pos))) bt 0 (int size))
+    bt))
 
 (defn ^Long des-int
   "public helper function that reads the int from a message, this function takes the ByteBuffer and reads the bytes into

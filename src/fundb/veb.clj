@@ -23,75 +23,75 @@
   [v] (:v (:max v)))
 
 
- (defn member?
-   "Returns true or false dependin if x is a member of v or any of its sub nodes
-    Runs in O(lg lg u) time"
-   [{:keys [u min max cluster] :as v} x]
-   (if u
-     (cond
-      (or (not v) (not x)) false ;check for null
+(defn member?
+  "Returns true or false dependin if x is a member of v or any of its sub nodes
+   Runs in O(lg lg u) time"
+  [{:keys [u min max cluster] :as v} x]
+  (if u
+    (cond
+      (or (not v) (not x)) false                            ;check for null
       (or (= (:v min) x) (= (:v max) x)) true
       (= u 2) false
-      :else (recur (cluster (high u x)) (low u x) )) ;recur into recursive call
-     false))
+      :else (recur (cluster (high u x)) (low u x)))         ;recur into recursive call
+    false))
 
- (defn successor
-   "Finds the successor of x in v and its subnodes
-    Runs in O(lg lg u) time"
-   [{:keys [u max min cluster summary] :as v} x]
-   (cond
-         (not u) nil
-         (= u 2)
-         (if (and (= x 0) (= (:v max) 1)) [1 max] nil)
-         (and (:v min) (< x (:v min)))
-         [(:v min) min]
-         :else
-         (let [x-high (high u x)
-               x-low (low u x)
-               max-low (veb-max (get cluster x-high))]
-           (if (and max-low (< x-low max-low))
-             (let [[succ-i data2] (successor (cluster x-high) x-low)]
-               (prn "x-high " x-high  " x " x " succ-i " succ-i   " u " u " x-high " x-high " v " v)
-               [(index u x-high succ-i) data2])
-             (let [[succ-cluster data]
-                   (successor summary x-high)]
-               (if (not succ-cluster)
-                 nil
-                 [(index u succ-cluster (veb-min (cluster succ-cluster))) data]  ))))))
-
-
- (defn successor-v [v x]
-   (first (successor v x)))
+(defn successor
+  "Finds the successor of x in v and its subnodes
+   Runs in O(lg lg u) time"
+  [{:keys [u max min cluster summary] :as v} x]
+  (cond
+    (not u) nil
+    (= u 2)
+    (if (and (= x 0) (= (:v max) 1)) [1 max] nil)
+    (and (:v min) (< x (:v min)))
+    [(:v min) min]
+    :else
+    (let [x-high (high u x)
+          x-low (low u x)
+          max-low (veb-max (get cluster x-high))]
+      (if (and max-low (< x-low max-low))
+        (let [[succ-i data2] (successor (cluster x-high) x-low)]
+          ;(prn "x-high " x-high  " x " x " succ-i " succ-i   " u " u " x-high " x-high " v " v)
+          [(index u x-high succ-i) data2])
+        (let [[succ-cluster data]
+              (successor summary x-high)]
+          (if (not succ-cluster)
+            nil
+            [(index u succ-cluster (veb-min (cluster succ-cluster))) data]))))))
 
 
- (defn find-data
-   "Find a key and its data using log log u time"
-   [{:keys [u min max cluster summary] :as m} x]
+(defn successor-v [v x]
+  (first (successor v x)))
 
-   (cond
+
+(defn find-data
+  "Find a key and its data using log log u time"
+  [{:keys [u min max cluster summary] :as m} x]
+
+  (cond
     (or (< x (:v min)) (> x (:v max)))
-     nil
+    nil
     (= x (:v min))
-     min
+    min
     (= x (:v max))
-     max
+    max
     :ele
-     (let [x-high (high u x)
-           x-low (low u x)
-           c (cluster x-high)]
-       (if c
-         (find-data c x-low)
-         m))))
+    (let [x-high (high u x)
+          x-low (low u x)
+          c (cluster x-high)]
+      (if c
+        (find-data c x-low)
+        m))))
 
 
 
- (defn predecessor
-   "Finds the predecessor of x in v and its subnodes
-    Runs in O(lg lg u) time"
-   [{:keys [u min max cluster summary] :as v} x]
+(defn predecessor
+  "Finds the predecessor of x in v and its subnodes
+   Runs in O(lg lg u) time"
+  [{:keys [u min max cluster summary] :as v} x]
 
-   (if (or  (= u 2) (and cluster summary))
-     (cond
+  (if (or (= u 2) (and cluster summary))
+    (cond
       (= u 2) (if (and (= 1 x) (= (:v min) 0)) 0 nil)
       (and (:v max) (> x (:v max))) (:v max)
       :else
@@ -106,8 +106,8 @@
 
 (defn _veb-tree-seq [v start-x]
   (lazy-seq
-          (if-let [succ (successor v start-x)]
-            (cons succ (_veb-tree-seq v (first succ))))))
+    (if-let [succ (successor v start-x)]
+      (cons succ (_veb-tree-seq v (first succ))))))
 
 (defn veb-tree-seq
   ([v] (veb-tree-seq v (veb-min v)))
@@ -129,7 +129,7 @@
   "Handles the different cases for inserting an empty node and creates to the currect attributes based on u"
   [u v x data]
   (if (:u v)
-    (assoc v :min (assoc data :v x) :max (assoc data :v x) )
+    (assoc v :min (assoc data :v x) :max (assoc data :v x))
     (let [u-root (upper-sqrt u)
           data-m (assoc data :v x)]
       (if (> u-root 2)
@@ -166,22 +166,22 @@
 (defn insert1 [{:keys [u min] :as v} x data]
   (if (veb-min v)
     (cond
-     (< x (:v min))
-     (exhange-x-with-min v x data)
-     (> u 2)
-     (let [x-high (high u x)
+      (< x (:v min))
+      (exhange-x-with-min v x data)
+      (> u 2)
+      (let [x-high (high u x)
             x-low (low u x)
             c (get-cluster v x-high data)]
         (if (veb-min (get-in v [:cluster x-high]))
           (->
-           v
-           (add-to-cluster x-high (insert1 c x-low data))
-           (check-max x data))
+            v
+            (add-to-cluster x-high (insert1 c x-low data))
+            (check-max x data))
           (->
-           v
-           (add-summary x-high data)
-           (add-to-cluster x-high (insert1 c x-low data))
-           (check-max x data))))
+            v
+            (add-summary x-high data)
+            (add-to-cluster x-high (insert1 c x-low data))
+            (check-max x data))))
       :else (check-max v x data))
     (empty-insert u v x data)))
 
@@ -192,7 +192,7 @@
     The order preserving hash of k is used as the internal key, and :keys #{k} is assoced to data.
   "
   [v k data]
-  (insert1 v (o-hash k) (assoc data :keys #{k} )))
+  (insert1 v (o-hash k) (assoc data :keys #{k})))
 
 
 (defn create-tree

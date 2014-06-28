@@ -16,7 +16,7 @@
   "Reads the mesages written in [len][msg]... format where len is an integer
    A vector is returned where each element is a map with keys msg-pos, size, i, buff"
   [^ByteBuffer buff state pos]
-  (let [ref-buff (.slice buff)];we use this buff to read the values from, so that the position is always at the start
+  (let [ref-buff (.slice buff)]                             ;we use this buff to read the values from, so that the position is always at the start
     (loop [state2 state i pos]
       (if (> (.remaining buff) 0)
         (let [size (.getInt buff)

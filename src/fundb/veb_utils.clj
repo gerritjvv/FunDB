@@ -15,14 +15,14 @@
 (defonce log-int-limit (Math/pow 2 30))
 
 (defn ^long log2-long [^long bits]
-   (long (/ (Math/log bits) log2)))
+  (long (/ (Math/log bits) log2)))
 
 (defn ^long log2-int
   "Fast log2 calculation for integer numbers
    http://stackoverflow.com/questions/3305059/how-do-you-calculate-log-base-2-in-java-for-integers
    user: http://stackoverflow.com/users/237321/x4u"
   [^long bits]
-  (if (= bits 0) 0  (- 31 (Integer/numberOfLeadingZeros (int bits)))))
+  (if (= bits 0) 0 (- 31 (Integer/numberOfLeadingZeros (int bits)))))
 
 (defn veb-sqrt
   "Calculates the sqrt based on 2^([lg u]/2) where lg is base 2"
@@ -31,10 +31,10 @@
   (Math/pow 2 (/ (if (> u log-int-limit) (log2-long u) (log2-int u)) 2)))
 
 (defn lower-sqrt [u]
-   (long (Math/floor (veb-sqrt u))))
+  (long (Math/floor (veb-sqrt u))))
 
 (defn upper-sqrt [u]
-   (long (Math/ceil (veb-sqrt u))))
+  (long (Math/ceil (veb-sqrt u))))
 
 (defn high
   "Calculates the high value of x taking into account u as a power of 2 where sqrt(u) is not an exact number"

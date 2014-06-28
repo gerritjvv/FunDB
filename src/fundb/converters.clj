@@ -1,8 +1,8 @@
 (ns fundb.converters
   (:import
-   [io.netty.buffer ByteBuf Unpooled]
-   [fundb.utils BytesUtil]
-   [java.nio ByteBuffer]))
+    [io.netty.buffer ByteBuf Unpooled]
+    [fundb.utils BytesUtil]
+    [java.nio ByteBuffer]))
 
 (defprotocol TComparable
   (compareTo [a b] "Return -1 if a is smaller than b, 0 if a == b and 1 if a > b"))
@@ -29,10 +29,10 @@
 
   ToByteArray
   (to-bytearray [^ByteBuf x]
-                (let [^"[B" bts (byte-array (.readableBytes x))
-                      reader-index (.readerIndex x)]
-                  (.getBytes x reader-index bts)
-                  bts)))
+    (let [^"[B" bts (byte-array (.readableBytes x))
+          reader-index (.readerIndex x)]
+      (.getBytes x reader-index bts)
+      bts)))
 
 (extend-type ByteBuffer
 

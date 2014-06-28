@@ -16,7 +16,7 @@
   "Works in O(lg lg 2) v = proto-vEB x is an element number"
   [v x]
   (if (= (:u v) 2)
-    ((:array v) x);gets index x from array in v
+    ((:array v) x)                                          ;gets index x from array in v
     (member ((:cluster v) (high x)) (low x))))
 
 (defn minimum
@@ -24,9 +24,9 @@
   [{:keys [u array summary cluster]}]
   (if (= u 2)
     (cond
-     (= (array 0) 1) 0
-     (= (array 1) 1) 1
-     :else nil)
+      (= (array 0) 1) 0
+      (= (array 1) 1) 1
+      :else nil)
     (let [min-cluster (minimum summary)]
       (if minimum
         (index u min-cluster (minimum (cluster min-cluster))))

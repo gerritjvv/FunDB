@@ -5,9 +5,11 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.6.0"]
  		             [fileape "0.5.0-SNAPSHOT"]
+                 [prismatic/schema "0.2.4"]
                  [org.clojure/core.cache "0.6.3"]
                  [org.apache.hadoop/hadoop-common "2.2.0"]
                  [io.netty/netty-buffer "4.0.19.Final"]
+                 [com.taoensso/nippy "2.6.3"]
                  [org.clojure/test.check "0.5.7" :scope "test"]
 		 [org.clojure/tools.trace "0.7.8" :scope "provided"]]
 
