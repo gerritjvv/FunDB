@@ -13,6 +13,7 @@
 ;cluster the cluster vector pointing to vEB node structures
 ;if u is 2 then this is a base case and the keys summary and cluster are not represent
 
+(def MAX_U 2147483646)
 
 (defn veb-min
   "Returns the minimum for v and runs in constant time"
@@ -198,6 +199,7 @@
 (defn create-tree
   "Helper function to create a tree and applying n inserts i.e each element in inserts is inserted into a tree of size u"
   [u inserts data]
+  {:pre [(>= MAX_U u)]}
   (reduce (fn [tree i] (insert tree i data)) (create-root u) inserts))
 
 
