@@ -41,3 +41,22 @@
                            (= min (:min node2))
                            (= max (:max node2)))
                          )))
+
+(defspec write-read-node-with-individual-get-functions
+         100
+         (prop/for-all [node (gen/map (gen/elements [:min :max]) gen/nat)
+                        u (gen/such-that #(and (pos? %) (< % 500)) gen/nat)]
+
+                       (let [ u-sqrt (vebutils/upper-sqrt u)
+                              node2 (merge {:min 0 :max 10 :u u :min-data 100} node)
+                              ^ByteBuffer buff (ByteBuffer/allocate (+ 33 (veb/cluster-byte-size u-sqrt)))
+                             ]
+                         (doto buff (veb/write-node!! node2) (.flip))
+
+                         (and
+                           (= veb/NOT_DELETED (veb/read-deleted buff 0))
+                           (= (:u node2) (veb/read-u buff 0))
+                           (= (:min node2) (veb/read-min buff 0))
+                           (= (:max node2) (veb/read-max buff 0))
+                           (= (:min-data node2) (veb/read-min-data buff 0)))
+                         )))
