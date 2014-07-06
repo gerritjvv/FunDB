@@ -14,10 +14,9 @@
   "Write a (* sqrt (+ 4 2)) byte array to the buff starting at the current position
    Returns the buff"
   [^ByteBuffer buff ^Long u]
-  (let [^Long sqrt (vutils/upper-sqrt u)]
-    (if (> sqrt 2)
-      (.put buff (byte-array (* sqrt (+ 4 2)) (byte INIT_CLUSTER_REF)))
-      buff)))
+  (if (> u 2)
+    (.put buff (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
+    buff))
 
 (defn ^String read-header [^ByteBuffer buff]
   (let [bts (byte-array 5)]
@@ -101,15 +100,52 @@
   [^ByteBuffer buff ^Long pos]
   (.getLong buff (+ pos 8 8 8 8 1)))
 
-(defn ^Long read-cluster-reaf
-  "Return a cluster reference from the node pos and based on the integer i
+(defn ^Long read-cluster-ref
+  "Return a cluster reference from the node pos and based on the integer i, the value returned is always an Int
    @param buff ByteBuffer
    @param pos Long node position
    @param i cluster index
    @return Long"
   [^ByteBuffer buff ^Long pos ^Long i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
-  (.getLong buff (+ pos 8 8 8 8 1 (* i 6))))
+  (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
+
+
+(defn ^Long read-cluster-file-index
+  "Return a value of type Short that represents the file index value
+   @param buff ByteBuffer
+   @param pos Long node position
+   @param i cluster index
+   @return Short cluster's file index"
+  [^ByteBuffer buff ^Long pos ^Long i]
+  ;remember a cluster ref is 4 byte index 2 bytes (short) file index
+  (.getShort buff (+ pos 8 8 8 8 1 4 (* i 6))))
+
+(defn ^ByteBuffer write-cluster-ref
+  "Write a cluster's ref and file index
+   @param buff ByteBuffer
+   @param pos Long node position
+   @param i cluster index
+   @param r the cluster's ref
+   @param f-i the cluster's file index
+   @return ByteBuffer"
+  [^ByteBuffer buff ^Long pos ^Long i ^Long r ^Long f-i]
+  ;remember a cluster ref is 4 byte index 2 bytes (short) file index
+  (let [pos1 (+ pos 8 8 8 8 1 (* i 6))]
+    (doto buff
+      (.putInt pos1 (int r))
+      (.putShort (+ pos1 4) (short f-i)))))
+
+
+(defn ^Long read-cluster-file-index
+  "Return a value of type Short that represents the file index value
+   @param buff ByteBuffer
+   @param pos Long node position
+   @param i cluster index
+   @return Short cluster's file index"
+  [^ByteBuffer buff ^Long pos ^Long i]
+  ;remember a cluster ref is 4 byte index 2 bytes (short) file index
+  (.getShort buff (+ pos 8 8 8 8 1 4 (* i 6))))
 
 
 (defn ^Long cluster-byte-size
