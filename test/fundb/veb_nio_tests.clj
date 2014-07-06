@@ -81,3 +81,10 @@
                          (all-true?
                            (map #(and (= % (veb/read-cluster-ref buff 0 %)) (= (inc %) (veb/read-cluster-file-index buff 0 %))) (range u-sqrt)))
                          )))
+
+(defspec write-read-header
+         100
+         (prop/for-all [n gen/nat]
+                       (let [^ByteBuffer buff (ByteBuffer/allocate 5)]
+                         (= (String. veb/INDEX_HEADER)
+                            (-> buff veb/write-header .flip veb/read-header)))))

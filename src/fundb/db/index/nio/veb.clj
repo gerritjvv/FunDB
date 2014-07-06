@@ -7,6 +7,8 @@
 (def ^Long DELETED 1)
 (def ^Long INIT_CLUSTER_REF -1)
 
+(def ^"[B" INDEX_HEADER (.getBytes (String. "FUNDB")))
+
 ;cluster-pos the position at which the cluster for the node starts
 (defrecord Node [deleted ^Long u ^Long min ^Long min-data ^Long max ^Long cluster-pos])
 
@@ -20,7 +22,11 @@
 
 (defn ^String read-header [^ByteBuffer buff]
   (let [bts (byte-array 5)]
-    (String. ^"[B" (.get buff bts))))
+    (.get buff bts)
+    (String. ^"[B" bts)))
+
+(defn ^ByteBuffer write-header [^ByteBuffer buff]
+  (.put buff INDEX_HEADER))
 
 (defn ^ByteBuffer write-node!!
   "Move the cursor of the buffer
