@@ -32,7 +32,6 @@
   [^ByteBuffer buff {:keys [^Long u ^Long min ^Long min-data ^Long max] :as node}]
   {:pre [buff (number? u) (number? min) (number? min-data) (number? max)
          (>= (.remaining buff) 33)]}
-  (prn node)
   (doto buff
     (.put (byte NOT_DELETED))
     (.putLong u)

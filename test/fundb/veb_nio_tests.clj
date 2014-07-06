@@ -20,3 +20,21 @@
                            (= min (:min node2))
                            (= max (:max node2)))
                          )))
+
+
+(defspec write-read-node-with-cluster
+         100
+         (prop/for-all [node (gen/map (gen/elements [:min :max]) gen/nat)
+                        u (gen/such-that #(and (pos? %) (< % 500)) gen/nat)]
+
+                       (let [node2 (merge {:min 0 :max 10 :u u :min-data 100} node)
+                             ^ByteBuffer buff (ByteBuffer/allocate 33)
+                             {:keys [u max min]} (-> buff
+                                                     (veb/write-node!! node2)
+                                                     (.flip)
+                                                     (veb/read-node))]
+                         (and
+                           (= u 2)
+                           (= min (:min node2))
+                           (= max (:max node2)))
+                         )))
