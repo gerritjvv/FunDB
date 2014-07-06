@@ -16,7 +16,7 @@
   [^ByteBuffer buff ^Long u]
   (let [^Long sqrt (vutils/upper-sqrt u)]
     (if (> sqrt 2)
-      (.put buff (byte-array (* sqrt (+ 4 2)) INIT_CLUSTER_REF))
+      (.put buff (byte-array (* sqrt (+ 4 2)) (byte INIT_CLUSTER_REF)))
       buff)))
 
 (defn ^String read-header [^ByteBuffer buff]
@@ -108,6 +108,12 @@
    @param i cluster index
    @return Long"
   [^ByteBuffer buff ^Long pos ^Long i]
-  (.getLong buff (+ pos 8 8 8 8 1 (* i 8))))
+  ;remember a cluster ref is 4 byte index 2 bytes (short) file index
+  (.getLong buff (+ pos 8 8 8 8 1 (* i 6))))
 
 
+(defn ^Long cluster-byte-size
+  "@param n the number of items in the cluster e.g sqrt(u)
+   @return The number of bytes required by the cluster which is (* n 6)"
+  [^Long n]
+  (* n 6))
