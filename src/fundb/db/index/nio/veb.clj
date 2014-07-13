@@ -38,6 +38,15 @@
     (.writeBytes buff (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
     buff))
 
+(defn- ^ByteBuf put-init-cluster
+  "Write a (* sqrt (+ 4 2)) byte array to the buff
+   Returns the buff"
+  [^ByteBuf buff ^Long pos ^Long u]
+  (if (> u 2)
+    (.setBytes buff (+ pos 33) (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
+    buff))
+
+
 (defn ^String read-header [^ByteBuf buff]
   (let [^"[B" bts (byte-array 5)]
     (.getBytes buff 0 bts)
@@ -99,6 +108,11 @@
 (defn read-u
   [^ByteBuf buff ^Long pos]
   (.getLong buff (inc pos)))
+
+(defn ^Long write-u
+  [^ByteBuf buff ^Long pos ^Long u]
+  (.setLong buff (inc pos) u))
+
 
 (defn ^Long read-min
   "@param buff ByteBuffer
@@ -196,6 +210,20 @@
 (defn ^Long init-file-size [u]
   (+ (count INDEX_HEADER) 1 4 (node-byte-size u)))
 
+(defn ^ByteBuffer write-node
+  "@param buff ByteBuffer
+   @param Node
+   @param position in the buffer
+   @return ByteBuffer"
+  [^ByteBuf buff pos {:keys [^Long u ^Long min ^Long min-data ^Long max] :as node}]
+  (.setByte buff pos (byte NOT_DELETED))
+  (write-u buff pos u)
+  (write-min buff pos min)
+  (write-min-data buff pos min-data)
+  (write-max buff pos max)
+  (put-init-cluster buff pos u))
+
+
 ;@TODO create the index file, write headder, version and the root node
 ;@TODO test get set position pointer
 (defn create-index
@@ -238,16 +266,19 @@
   (let [
         v-min (read-min buff pos)
         v-max (read-max buff pos)]
-    (cond
-      (= v-min -1) (do
-                     (write-min buff pos k)
-                     (write-min-data buff pos data-id))
-      (< k v-min)  (let [old-data-id (read-min-data buff pos)
-                         cluster-ref (read-cluster-ref buff pos (vutils/upper-sqrt v-min))]
-                     (write-min buff pos k)
-                     (write-min-data buff pos data-id)
+    (if (= v-min -1)
+      (do
+        (write-min buff pos k)
+        (write-min-data buff pos data-id))
+      (let [high (vutils/upper-sqrt u)
+            cluster-ref (read-cluster-ref buff pos high)]
+        (if (= cluster-ref -1)
+          (do                                               ;cluster ref is -1
+            (insert-new-node pos high ))
+          (do                                               ;cluster ref exists
+            )
+          ))
 
-                     )
       )))
 
 (defn insert! [index k data-id]
