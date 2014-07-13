@@ -1,6 +1,11 @@
 (ns fundb.db.index.nio.veb
-  (:require [fundb.veb-utils :as vutils])
-  (:import [java.nio MappedByteBuffer ByteBuffer Buffer]))
+  (:require [fundb.veb-utils :as vutils]
+            [clojure.java.io :as io])
+  (:import
+    [java.io RandomAccessFile]
+    [java.nio MappedByteBuffer ByteBuffer Buffer]
+    [io.netty.buffer ByteBuf Unpooled]
+    (java.nio.channels FileChannel FileChannel$MapMode)))
 
 (def ^Long VERSION 1)
 (def ^Long NOT_DELETED 0)
@@ -12,21 +17,33 @@
 ;cluster-pos the position at which the cluster for the node starts
 (defrecord Node [deleted ^Long u ^Long min ^Long min-data ^Long max ^Long cluster-pos])
 
-(defn- ^ByteBuffer put-init-cluster
+(defn ^ByteBuf write-position-pointer
+  "Note: this function does not alter the bb position"
+  [^ByteBuf bb ^Long pointer]
+  (.setInt bb 6 (int pointer)))
+
+(defn ^Long read-position-pointer
+  "Note: this function does not alter the bb position"
+  [^ByteBuf bb]
+  (.getInt bb 6))
+
+(defn- ^ByteBuf put-init-cluster!
   "Write a (* sqrt (+ 4 2)) byte array to the buff starting at the current position
    Returns the buff"
-  [^ByteBuffer buff ^Long u]
+  [^ByteBuf buff ^Long u]
   (if (> u 2)
-    (.put buff (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
+    (.writeBytes buff (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
     buff))
 
-(defn ^String read-header [^ByteBuffer buff]
-  (let [bts (byte-array 5)]
-    (.get buff bts)
-    (String. ^"[B" bts)))
+(defn ^String read-header [^ByteBuf buff]
+  (let [^"[B" bts (byte-array 5)]
+    (.getBytes buff 0 bts)
+    (String. bts "UTF-8")))
 
-(defn ^ByteBuffer write-header [^ByteBuffer buff]
-  (.put buff INDEX_HEADER))
+(defn ^ByteBuffer write-header
+  "Note: does not alter the bb position"
+  [^ByteBuf buff]
+  (.setBytes buff 0 INDEX_HEADER))
 
 (defn ^ByteBuffer write-node!!
   "Move the cursor of the buffer
@@ -34,77 +51,69 @@
    @param Node
    @param position in the buffer
    @return ByteBuffer"
-  [^ByteBuffer buff {:keys [^Long u ^Long min ^Long min-data ^Long max] :as node}]
+  [^ByteBuf buff {:keys [^Long u ^Long min ^Long min-data ^Long max] :as node}]
   {:pre [buff (number? u) (number? min) (number? min-data) (number? max)
-         (>= (.remaining buff) 33)]}
+         (>= (.readableBytes buff) 33)]}
   (doto buff
-    (.put (byte NOT_DELETED))
-    (.putLong u)
-    (.putLong min)
-    (.putLong min-data)
-    (.putLong max)
-    (put-init-cluster u)
+    (.writeByte (byte NOT_DELETED))
+    (.writeLong u)
+    (.writeLong min)
+    (.writeLong min-data)
+    (.writeLong max)
+    (put-init-cluster! u)
     ))
 
+(defn write-version
+  "Note: this function does not alter the bb position"
+  [^ByteBuf bb]
+  (.setByte bb 5 (byte VERSION)))
 
-(defn ^ByteBuffer safe-write-node
-  "@param buff ByteBuffer must be at position zero
-   @param pos Long position to start writing
-   @return ByteBuffer"
-  [^ByteBuffer buff node ^Long pos]
-  {:pre [(= (.position buff) 0)]}
-  (doto buff
-    .slice
-    (.position (int pos))
-    (write-node!! node)))
+(defn ^Long read-version
+  "Note: this function does not alter the bb position"
+  [^ByteBuf bb]
+  (.getByte bb 5))
 
 (defn ^Node read-node
   "@param buff ByteBuffer performs a slice on the buffer before reading
    @return Node"
-  [^ByteBuffer buff]
-  (let [^ByteBuffer buff2 (.slice buff)]
-    (->Node (= (.get buff2) DELETED)                                 ;deleted
-            (.getLong buff2)                                ;u
-            (.getLong buff2)                                ;min
-            (.getLong buff2)                                ;min-data
-            (.getLong buff2)                                ;max
-            (.position buff)                                ;cluster-pos
+  [^ByteBuf buff]
+  (let [^ByteBuf buff2 (.slice buff)]
+    (->Node (= (.readByte buff2) DELETED)                                 ;deleted
+            (.readLong buff2)                                ;u
+            (.readLong buff2)                                ;min
+            (.readLong buff2)                                ;min-data
+            (.readLong buff2)                                ;max
+            (.readerIndex buff)                                ;cluster-pos
             )))
 
 (defn read-deleted
   "Returns the deleted flag 0 == is deleted 1 == not
    @param buff ByteBuffer
    @param pos Long node position"
-  [^ByteBuffer buff ^Long pos]
-  (= (.get buff) DELETED))
+  [^ByteBuf buff ^Long pos]
+  (= (.getByte buff pos) DELETED))
 
 (defn read-u
-  [^ByteBuffer buff ^Long pos]
+  [^ByteBuf buff ^Long pos]
   (.getLong buff (inc pos)))
 
 (defn ^Long read-min
   "@param buff ByteBuffer
    @param pos Long node position"
-  [^ByteBuffer buff ^Long pos]
+  [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 1)))
 
 (defn ^Long read-max
   "@param buff ByteBuffer
    @param pos Long node position"
-  [^ByteBuffer buff ^Long pos]
+  [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 8 8 1)))
 
 (defn ^Long read-min-data
   "@param buff ByteBuffer
    @param pos Long node position"
-  [^ByteBuffer buff ^Long pos]
+  [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 8 1)))
-
-(defn ^Long read-cluster-pos
-  "@param buff ByteBuffer
-   @param pos Long node position"
-  [^ByteBuffer buff ^Long pos]
-  (.getLong buff (+ pos 8 8 8 8 1)))
 
 (defn ^Long read-cluster-ref
   "Return a cluster reference from the node pos and based on the integer i, the value returned is always an Int
@@ -112,7 +121,7 @@
    @param pos Long node position
    @param i cluster index
    @return Long"
-  [^ByteBuffer buff ^Long pos ^Long i]
+  [^ByteBuf buff ^Long pos ^Long i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
 
@@ -123,11 +132,11 @@
    @param pos Long node position
    @param i cluster index
    @return Short cluster's file index"
-  [^ByteBuffer buff ^Long pos ^Long i]
+  [^ByteBuf buff ^Long pos ^Long i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   (.getShort buff (+ pos 8 8 8 8 1 4 (* i 6))))
 
-(defn ^ByteBuffer write-cluster-ref
+(defn ^ByteBuf write-cluster-ref
   "Write a cluster's ref and file index
    @param buff ByteBuffer
    @param pos Long node position
@@ -135,12 +144,12 @@
    @param r the cluster's ref
    @param f-i the cluster's file index
    @return ByteBuffer"
-  [^ByteBuffer buff ^Long pos ^Long i ^Long r ^Long f-i]
+  [^ByteBuf buff ^Long pos ^Long i ^Long r ^Long f-i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   (let [pos1 (+ pos 8 8 8 8 1 (* i 6))]
     (doto buff
-      (.putInt pos1 (int r))
-      (.putShort (+ pos1 4) (short f-i)))))
+      (.setInt pos1 (int r))
+      (.setShort (+ pos1 4) (short f-i)))))
 
 
 (defn ^Long read-cluster-file-index
@@ -149,7 +158,7 @@
    @param pos Long node position
    @param i cluster index
    @return Short cluster's file index"
-  [^ByteBuffer buff ^Long pos ^Long i]
+  [^ByteBuf buff ^Long pos ^Long i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   (.getShort buff (+ pos 8 8 8 8 1 4 (* i 6))))
 
@@ -159,3 +168,24 @@
    @return The number of bytes required by the cluster which is (* n 6)"
   [^Long n]
   (* n 6))
+
+(defn ^Long node-byte-size [u]
+  (+ 33 (cluster-byte-size (vutils/upper-sqrt u))))
+
+(defn- ^Long init-file-size [u]
+  (+ (count INDEX_HEADER) 1 (node-byte-size u)))
+
+;@TODO create the index file, write headder, version and the root node
+;@TODO test get set position pointer
+(defn create-index
+  "Write"
+  [f u]
+  (with-open [^FileChannel ch (-> f io/file (RandomAccessFile. "rw") .getChannel)]
+    ;
+    (let [^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (init-file-size u))
+          ^ByteBuf bb (Unpooled/wrappedBuffer mbb)]
+      (write-header bb)
+      (write-version bb)
+      (write-position-pointer bb 0)
+      (.writerIndex bb 10)
+      (write-node!! bb (->Node NOT_DELETED u -1 -1 -1 -1)))))
