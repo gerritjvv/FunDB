@@ -2,7 +2,7 @@
   (:require [fundb.veb-utils :as vutils]
             [clojure.java.io :as io])
   (:import
-    [java.io RandomAccessFile]
+    [java.io File RandomAccessFile]
     [java.nio MappedByteBuffer ByteBuffer Buffer]
     [io.netty.buffer ByteBuf Unpooled]
     (java.nio.channels FileChannel FileChannel$MapMode)))
@@ -16,6 +16,9 @@
 
 ;cluster-pos the position at which the cluster for the node starts
 (defrecord Node [deleted ^Long u ^Long min ^Long min-data ^Long max ^Long cluster-pos])
+(defrecord Index [^Long u ^ByteBuf buff ^MappedByteBuffer mbuff ^FileChannel file-channel])
+
+(declare cluster-byte-size)
 
 (defn ^ByteBuf write-position-pointer
   "Note: this function does not alter the bb position"
@@ -53,7 +56,7 @@
    @return ByteBuffer"
   [^ByteBuf buff {:keys [^Long u ^Long min ^Long min-data ^Long max] :as node}]
   {:pre [buff (number? u) (number? min) (number? min-data) (number? max)
-         (>= (.readableBytes buff) 33)]}
+         (>= (.readableBytes buff) (+ 33 (cluster-byte-size u)))]}
   (doto buff
     (.writeByte (byte NOT_DELETED))
     (.writeLong u)
@@ -173,12 +176,12 @@
   (+ 33 (cluster-byte-size (vutils/upper-sqrt u))))
 
 (defn- ^Long init-file-size [u]
-  (+ (count INDEX_HEADER) 1 (node-byte-size u)))
+  (+ (count INDEX_HEADER) 1 4 (node-byte-size u)))
 
 ;@TODO create the index file, write headder, version and the root node
 ;@TODO test get set position pointer
 (defn create-index
-  "Write"
+  "Create a new file and write the index header and root node"
   [f u]
   (with-open [^FileChannel ch (-> f io/file (RandomAccessFile. "rw") .getChannel)]
     ;
@@ -188,4 +191,25 @@
       (write-version bb)
       (write-position-pointer bb 0)
       (.writerIndex bb 10)
-      (write-node!! bb (->Node NOT_DELETED u -1 -1 -1 -1)))))
+      (write-node!! bb (->Node NOT_DELETED u -1 -1 -1 -1))
+      )))
+
+;(defrecord Index [^Long u ^ByteBuf buff ^MappedByteBuffer mbuff ^FileChannel file-channel])
+(defn load-index
+  "Load the start information for the index to be read"
+  [f]
+  (let [^File file (io/file f)
+        ^FileChannel ch (-> file (RandomAccessFile. "rw") .getChannel)
+        ^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (.length file))
+        ^ByteBuf bb (Unpooled/wrappedBuffer mbb)
+        header (read-header bb)
+        version (read-version bb)]
+    (assert (and (= header INDEX_HEADER) (= version VERSION)) (str "Wrong index version and or header version: " version  " head: " header))
+    (Index. (read-u bb 10) bb mbb ch)))
+
+
+(defn close-index!
+  "Force edits and close the index"
+  [{:keys [^MappedByteBuffer mbuff ^FileChannel file-channel]}]
+  (.force mbuff)
+  (.close file-channel))

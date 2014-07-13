@@ -101,3 +101,16 @@
                               (-> buff veb/write-header veb/read-header))
                            (= (int n) (veb/read-position-pointer buff))
                            (= veb/VERSION (veb/read-version buff))))))
+
+(defspec create-load-close-index
+         100
+         (prop/for-all [n (gen/such-that #(and (> % 4) (< % 31)) gen/nat)]
+                       (let [f "target/test/create-load-close-index/index.dat"
+                             u (long (Math/pow 2 n))]
+                         (-> f clojure.java.io/file .getParentFile .mkdirs)
+                         (veb/create-index f u)
+                         (let [i (veb/load-index f)]
+                           (veb/close-index! i)
+                           (prn "u: " u " i-u: " (:u i))
+                           (and
+                             (= u (:u i)))))))
