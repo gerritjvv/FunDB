@@ -111,6 +111,6 @@
                          (veb/create-index f u)
                          (let [i (veb/load-index f)]
                            (veb/close-index! i)
-                           (prn "u: " u " i-u: " (:u i))
                            (and
-                             (= u (:u i)))))))
+                             (= u (:u i))
+                             (= (veb/read-position-pointer (:buff i)) (veb/init-file-size u)))))))

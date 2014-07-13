@@ -106,17 +106,35 @@
   [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 1)))
 
+(defn ^ByteBuf write-min
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos ^Long v-min]
+  (.setLong buff (+ pos 8 1) v-min))
+
 (defn ^Long read-max
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 8 8 1)))
 
+(defn ^ByteBuf write-max
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos ^Long v-max]
+  (.setLong buff (+ pos 8 8 8 1) v-max))
+
 (defn ^Long read-min-data
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 8 1)))
+
+(defn ^ByteBuf write-min-data
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos ^Long data]
+  (.setLong buff (+ pos 8 8 1) data))
 
 (defn ^Long read-cluster-ref
   "Return a cluster reference from the node pos and based on the integer i, the value returned is always an Int
@@ -175,7 +193,7 @@
 (defn ^Long node-byte-size [u]
   (+ 33 (cluster-byte-size (vutils/upper-sqrt u))))
 
-(defn- ^Long init-file-size [u]
+(defn ^Long init-file-size [u]
   (+ (count INDEX_HEADER) 1 4 (node-byte-size u)))
 
 ;@TODO create the index file, write headder, version and the root node
@@ -192,6 +210,7 @@
       (write-position-pointer bb 0)
       (.writerIndex bb 10)
       (write-node!! bb (->Node NOT_DELETED u -1 -1 -1 -1))
+      (write-position-pointer bb (.writerIndex bb))
       )))
 
 ;(defrecord Index [^Long u ^ByteBuf buff ^MappedByteBuffer mbuff ^FileChannel file-channel])
@@ -213,3 +232,24 @@
   [{:keys [^MappedByteBuffer mbuff ^FileChannel file-channel]}]
   (.force mbuff)
   (.close file-channel))
+
+
+(defn _insert! [^ByteBuf buff ^Long u ^Long pos ^Long k ^Long data-id]
+  (let [
+        v-min (read-min buff pos)
+        v-max (read-max buff pos)]
+    (cond
+      (= v-min -1) (do
+                     (write-min buff pos k)
+                     (write-min-data buff pos data-id))
+      (< k v-min)  (let [old-data-id (read-min-data buff pos)
+                         cluster-ref (read-cluster-ref buff pos (vutils/upper-sqrt v-min))]
+                     (write-min buff pos k)
+                     (write-min-data buff pos data-id)
+
+                     )
+      )))
+
+(defn insert! [index k data-id]
+  (assert (and (number? k) (number? data-id)))
+  (_insert! (:buff index) (:u index) 10 k data-id))
