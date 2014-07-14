@@ -22,13 +22,15 @@
 
 (defn ^ByteBuf write-position-pointer
   "Note: this function does not alter the bb position"
-  [^ByteBuf bb ^Long pointer]
-  (.setInt bb 6 (int pointer)))
+  ([bb pointer]
+   (write-position-pointer bb pointer 0))
+  ([^ByteBuf bb ^Long pointer pos]
+   (.setInt bb (+ pos 6) (int pointer))))
 
 (defn ^Long read-position-pointer
   "Note: this function does not alter the bb position"
-  [^ByteBuf bb]
-  (.getInt bb 6))
+  ([^ByteBuf bb]
+   (.getInt bb 6)))
 
 (defn- ^ByteBuf put-init-cluster!
   "Write a (* sqrt (+ 4 2)) byte array to the buff starting at the current position
@@ -43,7 +45,7 @@
    Returns the buff"
   [^ByteBuf buff ^Long pos ^Long u]
   (if (> u 2)
-    (.setBytes buff (+ pos 33) (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
+    (.setBytes buff ^Long (+ pos 33) (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
     buff))
 
 
@@ -262,25 +264,72 @@
   (.close file-channel))
 
 
-(defn _insert! [^ByteBuf buff ^Long u ^Long pos ^Long k ^Long data-id]
-  (let [
-        v-min (read-min buff pos)
-        v-max (read-max buff pos)]
-    (if (= v-min -1)
-      (do
-        (write-min buff pos k)
-        (write-min-data buff pos data-id))
-      (let [high (vutils/upper-sqrt u)
-            cluster-ref (read-cluster-ref buff pos high)]
-        (if (= cluster-ref -1)
-          (do                                               ;cluster ref is -1
-            (insert-new-node pos high ))
-          (do                                               ;cluster ref exists
-            )
-          ))
+(declare _insert!)
 
-      )))
+(defn- check-child-capacity
+  "check if the current buffer has capacity for the child insert
+   if not the file is resized and a new buffer is created"
+  [{:keys [^ByteBuf buff ^FileChannel file-channel] :as index} pos ^Long position-pointer]
+  (let [u (read-u buff pos)
+        child-u (vutils/upper-sqrt u)
+        bts-size (node-byte-size child-u)]
+    (prn "bts-size " bts-size  " .capacity " (.capacity buff) " position-pointer " position-pointer)
+    (if (>= bts-size (- (.capacity buff) position-pointer))
+      (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (+ (* 10 bts-size) (.capacity buff)))]
+        (assoc index
+          :mmap mmap
+          :file-channel file-channel
+          :buff (Unpooled/wrappedBuffer ^ByteBuffer mmap)))
+      index)))
+
+(defn- write-case-one
+  "If k < min, overwrite current min with k and re-insert min"
+  [{:keys [^ByteBuf buff] :as index} pos k data-id]
+  (let [curr-min-data (read-min-data buff pos)
+        v-min (read-min buff pos)]
+    (write-min buff pos k)
+    (write-min-data buff pos data-id)
+    (_insert! index pos v-min curr-min-data)))
+
+(defn- write-case-two [{:keys [^ByteBuf buff] :as index} pos k data-id]
+  (write-min buff pos k)
+  (write-max buff pos k)
+  (write-min-data buff pos data-id)
+  index)
+
+(defn- write-case-three [{:keys [^ByteBuf buff ^Long u] :as index} pos k data-id]
+  (let [u (read-u buff pos)
+        i (vutils/high u k)
+        position-pointer (read-position-pointer buff)
+        index2 (check-child-capacity index pos position-pointer)]
+    (prn "case3 " buff " pos " pos)
+    (prn "case3 position-pointer: " position-pointer)
+    (write-node (:buff index2) position-pointer {:u (vutils/upper-sqrt u) :min k :max k :min-data data-id})
+    (write-cluster-ref (:buff index2) pos i position-pointer 1)
+    (write-position-pointer (:buff index2) pos)
+    index2))
+
+(defn- write-case-four [{:keys [buff] :as index} pos k data-id]
+  (let [u (read-u buff pos)]
+    (_insert! index
+              (read-cluster-ref buff pos (vutils/high u))   ;get the next position from the cluster-ref
+              (vutils/low u k)                              ;change k to low
+              data-id)))
+
+(defn _insert! [{:keys [^ByteBuf buff] :as index} ^Long pos ^Long k ^Long data-id]
+  (let [^Long v-min (read-min buff pos)
+        ^Long u (read-u buff pos)]
+    (cond
+      (< k v-min)
+      (write-case-one index pos k data-id)
+      (= -1 v-min)
+      (write-case-two index pos k data-id)
+      (= -1 (read-cluster-ref buff pos (vutils/high u k)))
+      (write-case-three index pos k data-id)
+      :else
+      (write-case-four index pos k data-id))))
+
 
 (defn insert! [index k data-id]
   (assert (and (number? k) (number? data-id)))
-  (_insert! (:buff index) (:u index) 10 k data-id))
+  (_insert! index 10 k data-id))
