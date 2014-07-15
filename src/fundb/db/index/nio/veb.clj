@@ -312,7 +312,7 @@
 (defn- write-case-four [{:keys [buff] :as index} pos k data-id]
   (let [u (read-u buff pos)]
     (_insert! index
-              (read-cluster-ref buff pos (vutils/high u))   ;get the next position from the cluster-ref
+              (read-cluster-ref buff pos (vutils/high u k))   ;get the next position from the cluster-ref
               (vutils/low u k)                              ;change k to low
               data-id)))
 
@@ -330,6 +330,23 @@
       (write-case-four index pos k data-id))))
 
 
-(defn insert! [index k data-id]
+(defn v-insert! [index k data-id]
   (assert (and (number? k) (number? data-id)))
   (_insert! index 10 k data-id))
+
+(defn- _v-get [{:keys [buff] :as index} ^Long pos ^Long k]
+  (let [v-min (read-min buff pos)
+        u (read-u buff pos)]
+    (cond
+      (= k v-min)
+      (read-min-data buff pos)
+      (> k v-min)
+      (let [^Long pos2 (read-cluster-ref buff pos (vutils/high u k))]
+        (when (> pos2 -1)
+          (_v-get index pos2 (vutils/low u k)))))))
+
+(defn v-get
+  "Returns the data-id at value k if it exists, otherwise nil"
+  [index k]
+  (when (and k (< k (read-u (:buff index) 10)))
+    (_v-get index 10 k)))
