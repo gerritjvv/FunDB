@@ -1,6 +1,6 @@
 (ns fundb.db.index.veb-storage
-  (:import (java.io DataInputStream FileInputStream))
   "Load and store veb indexes to disk"
+  (:import (java.io DataInputStream FileInputStream))
   (:require [taoensso.nippy :as nippy]
             [clojure.java.io :as io])
   (:import [java.io DataInputStream FileInputStream]))

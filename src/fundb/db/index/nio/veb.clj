@@ -81,19 +81,6 @@
   [^ByteBuf bb]
   (.getByte bb 5))
 
-(defn ^Node read-node
-  "@param buff ByteBuffer performs a slice on the buffer before reading
-   @return Node"
-  [^ByteBuf buff]
-  (let [^ByteBuf buff2 (.slice buff)]
-    (->Node (= (.readByte buff2) DELETED)                                 ;deleted
-            (.readLong buff2)                                ;u
-            (.readLong buff2)                                ;min
-            (.readLong buff2)                                ;min-data
-            (.readLong buff2)                                ;max
-            (.readerIndex buff)                                ;cluster-pos
-            )))
-
 (defn read-deleted
   "Returns the deleted flag 0 == is deleted 1 == not
    @param buff ByteBuffer
@@ -114,16 +101,13 @@
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos]
-  (prn "read min at " (+ pos 8 1))
   (.getLong buff (+ pos 8 1)))
 
 (defn ^ByteBuf write-min
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos ^Long v-min]
-  (prn "write min at " (+ pos 8 1) " v-min " v-min)
   (.setLong buff (+ pos 8 1) v-min)
-  (prn "min after writer is " (.getLong buff (+ pos 8 1)))
   buff)
 
 (defn ^Long read-max
@@ -158,18 +142,9 @@
    @return Long"
   [^ByteBuf buff ^Long pos ^Long i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
+  ;(prn "read-cluster-ref pos: " (+ pos 8 8 8 8 1 (* i 6)) "; i: " i "; r: " (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
   (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
 
-
-(defn ^Long read-cluster-file-index
-  "Return a value of type Short that represents the file index value
-   @param buff ByteBuffer
-   @param pos Long node position
-   @param i cluster index
-   @return Short cluster's file index"
-  [^ByteBuf buff ^Long pos ^Long i]
-  ;remember a cluster ref is 4 byte index 2 bytes (short) file index
-  (.getShort buff (+ pos 8 8 8 8 1 4 (* i 6))))
 
 (defn ^ByteBuf write-cluster-ref
   "Write a cluster's ref and file index
@@ -182,6 +157,7 @@
   [^ByteBuf buff ^Long pos ^Long i ^Long r ^Long f-i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   (let [pos1 (+ pos 8 8 8 8 1 (* i 6))]
+    ;(prn "write-cluster-ref pos: " pos1 "; i: " i  "; r: " r)
     (doto buff
       (.setInt pos1 (int r))
       (.setShort (+ pos1 4) (short f-i)))))
@@ -222,8 +198,19 @@
   (write-min-data buff pos min-data)
   (write-max buff pos max)
   (put-init-cluster buff pos u)
-  (prn "min after write-node " (read-min buff 10)))
+  buff)
 
+
+(defn ^Node read-node
+  ""
+  [^ByteBuf buff pos]
+  (->Node
+      (read-deleted buff pos)
+      (read-u buff pos)
+      (read-min buff pos)
+      (read-min-data buff pos)
+      (read-max buff pos)
+      pos))
 
 ;@TODO create the index file, write headder, version and the root node
 ;@TODO test get set position pointer
@@ -234,7 +221,6 @@
     ;
     (let [^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (init-file-size u))
           ^ByteBuf bb (Unpooled/wrappedBuffer mbb)]
-      (prn "file size " (init-file-size u))
       (write-header bb)
       (write-version bb)
       (write-position-pointer bb 0)
@@ -253,7 +239,6 @@
         ^ByteBuf bb (Unpooled/wrappedBuffer mbb)
         header (read-header bb)
         version (read-version bb)]
-    (prn " file size  " (.length file))
     (assert (and (= header INDEX_HEADER) (= version VERSION)) (str "Wrong index version and or header version: " version  " head: " header))
     (Index. (read-u bb 10) bb mbb ch)))
 
@@ -274,7 +259,6 @@
   (let [u (read-u buff pos)
         child-u (vutils/upper-sqrt u)
         bts-size (node-byte-size child-u)]
-    (prn "bts-size " bts-size  " .capacity " (.capacity buff) " position-pointer " position-pointer)
     (if (>= bts-size (- (.capacity buff) position-pointer))
       (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (+ (* 10 bts-size) (.capacity buff)))]
 
@@ -291,7 +275,6 @@
         v-min (read-min buff pos)]
     (write-min buff pos k)
     (write-min-data buff pos data-id)
-    (prn "write-case-one calling _insert! v-min " v-min )
     (_insert! index 10 v-min curr-min-data)))
 
 (defn- write-case-two [{:keys [^ByteBuf buff] :as index} pos k data-id]
@@ -305,7 +288,6 @@
         i (vutils/high u k)
         position-pointer (read-position-pointer buff)
         index2 (check-child-capacity index pos position-pointer)]
-    (prn "case3 " buff " pos " pos)
     (prn "case3 position-pointer: " position-pointer)
     (write-node (:buff index2) position-pointer {:u (vutils/upper-sqrt u) :min k :max k :min-data data-id})
     (write-cluster-ref (:buff index2) pos i position-pointer 1)
