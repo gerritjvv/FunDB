@@ -12,6 +12,20 @@
 (def ^Long DELETED 1)
 (def ^Long INIT_CLUSTER_REF -1)
 
+;Bytes
+;Description
+;5
+;FUNDB header
+;1
+;Index version
+;4
+;Free position pointer i.e points to the index of the next free index
+;82 bytes
+;Root Node
+;82 | 60
+;Next node | Cluster Ref Segment
+;[1 byte of which  the first bit is a tombstone flag bit 1 == deleted][8 bytes u][8 bytes min][8 bytes min-data][8 bytes max]
+
 (def ^"[B" INDEX_HEADER (.getBytes (String. "FUNDB")))
 
 ;cluster-pos the position at which the cluster for the node starts
@@ -22,10 +36,8 @@
 
 (defn ^ByteBuf write-position-pointer
   "Note: this function does not alter the bb position"
-  ([bb pointer]
-   (write-position-pointer bb pointer 0))
-  ([^ByteBuf bb ^Long pointer pos]
-   (.setInt bb (+ pos 6) (int pointer))))
+  [^ByteBuf bb ^Long pointer]
+  (.setInt bb 6 (int pointer)))
 
 (defn ^Long read-position-pointer
   "Note: this function does not alter the bb position"
@@ -58,24 +70,6 @@
   "Note: does not alter the bb position"
   [^ByteBuf buff]
   (.setBytes buff 0 INDEX_HEADER))
-
-(defn ^ByteBuffer write-node!!
-  "Move the cursor of the buffer
-   @param buff ByteBuffer
-   @param Node
-   @param position in the buffer
-   @return ByteBuffer"
-  [^ByteBuf buff {:keys [^Long u ^Long min ^Long min-data ^Long max] :as node}]
-  {:pre [buff (number? u) (number? min) (number? min-data) (number? max)
-         (>= (.readableBytes buff) (+ 33 (cluster-byte-size u)))]}
-  (doto buff
-    (.writeByte (byte NOT_DELETED))
-    (.writeLong u)
-    (.writeLong min)
-    (.writeLong min-data)
-    (.writeLong max)
-    (put-init-cluster! u)
-    ))
 
 (defn write-version
   "Note: this function does not alter the bb position"
@@ -120,13 +114,17 @@
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos]
+  (prn "read min at " (+ pos 8 1))
   (.getLong buff (+ pos 8 1)))
 
 (defn ^ByteBuf write-min
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos ^Long v-min]
-  (.setLong buff (+ pos 8 1) v-min))
+  (prn "write min at " (+ pos 8 1) " v-min " v-min)
+  (.setLong buff (+ pos 8 1) v-min)
+  (prn "min after writer is " (.getLong buff (+ pos 8 1)))
+  buff)
 
 (defn ^Long read-max
   "@param buff ByteBuffer
@@ -223,7 +221,8 @@
   (write-min buff pos min)
   (write-min-data buff pos min-data)
   (write-max buff pos max)
-  (put-init-cluster buff pos u))
+  (put-init-cluster buff pos u)
+  (prn "min after write-node " (read-min buff 10)))
 
 
 ;@TODO create the index file, write headder, version and the root node
@@ -235,12 +234,13 @@
     ;
     (let [^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (init-file-size u))
           ^ByteBuf bb (Unpooled/wrappedBuffer mbb)]
+      (prn "file size " (init-file-size u))
       (write-header bb)
       (write-version bb)
       (write-position-pointer bb 0)
-      (.writerIndex bb 10)
-      (write-node!! bb (->Node NOT_DELETED u -1 -1 -1 -1))
+      (write-node bb 10 (->Node NOT_DELETED u -1 -1 -1 -1))
       (write-position-pointer bb (.writerIndex bb))
+      (.force mbb)
       )))
 
 ;(defrecord Index [^Long u ^ByteBuf buff ^MappedByteBuffer mbuff ^FileChannel file-channel])
@@ -253,6 +253,7 @@
         ^ByteBuf bb (Unpooled/wrappedBuffer mbb)
         header (read-header bb)
         version (read-version bb)]
+    (prn " file size  " (.length file))
     (assert (and (= header INDEX_HEADER) (= version VERSION)) (str "Wrong index version and or header version: " version  " head: " header))
     (Index. (read-u bb 10) bb mbb ch)))
 
@@ -276,6 +277,7 @@
     (prn "bts-size " bts-size  " .capacity " (.capacity buff) " position-pointer " position-pointer)
     (if (>= bts-size (- (.capacity buff) position-pointer))
       (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (+ (* 10 bts-size) (.capacity buff)))]
+
         (assoc index
           :mmap mmap
           :file-channel file-channel
@@ -289,7 +291,8 @@
         v-min (read-min buff pos)]
     (write-min buff pos k)
     (write-min-data buff pos data-id)
-    (_insert! index pos v-min curr-min-data)))
+    (prn "write-case-one calling _insert! v-min " v-min )
+    (_insert! index 10 v-min curr-min-data)))
 
 (defn- write-case-two [{:keys [^ByteBuf buff] :as index} pos k data-id]
   (write-min buff pos k)
@@ -307,10 +310,12 @@
     (write-node (:buff index2) position-pointer {:u (vutils/upper-sqrt u) :min k :max k :min-data data-id})
     (write-cluster-ref (:buff index2) pos i position-pointer 1)
     (write-position-pointer (:buff index2) pos)
+
     index2))
 
 (defn- write-case-four [{:keys [buff] :as index} pos k data-id]
   (let [u (read-u buff pos)]
+    (prn "case-four u " u " k " k " low " (vutils/low u k))
     (_insert! index
               (read-cluster-ref buff pos (vutils/high u k))   ;get the next position from the cluster-ref
               (vutils/low u k)                              ;change k to low
@@ -319,6 +324,8 @@
 (defn _insert! [{:keys [^ByteBuf buff] :as index} ^Long pos ^Long k ^Long data-id]
   (let [^Long v-min (read-min buff pos)
         ^Long u (read-u buff pos)]
+    (prn "pos " pos " k " k " v-min " v-min  " u " u)
+
     (cond
       (< k v-min)
       (write-case-one index pos k data-id)
