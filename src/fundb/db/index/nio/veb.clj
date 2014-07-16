@@ -285,14 +285,23 @@
 
 (defn- write-case-three [{:keys [^ByteBuf buff ^Long u] :as index} pos k data-id]
   (let [u (read-u buff pos)
+        child-u (vutils/lower-sqrt u)
         i (vutils/high u k)
+        low (vutils/low u k)
         position-pointer (read-position-pointer buff)
+        updated-pointer (+
+                          position-pointer
+                          (node-byte-size child-u))
         index2 (check-child-capacity index pos position-pointer)]
     (prn "case3 position-pointer: " position-pointer)
-    (write-node (:buff index2) position-pointer {:u (vutils/upper-sqrt u) :min k :max k :min-data data-id})
-    (write-cluster-ref (:buff index2) pos i position-pointer 1)
-    (write-position-pointer (:buff index2) pos)
+    ;
+    ;(veb/write-node buff position-pointer {:u child-u :min k :max 5 :min-data 6})
+    ;(veb/write-cluster-ref buff pos i position-pointer -1)
+    ;(veb/write-position-pointer buff updated-pointer)
 
+    (write-node (:buff index2) position-pointer {:u child-u :min low :max low :min-data data-id})
+    (write-cluster-ref (:buff index2) pos i position-pointer -1)
+    (write-position-pointer (:buff index2) updated-pointer)
     index2))
 
 (defn- write-case-four [{:keys [buff] :as index} pos k data-id]
@@ -307,16 +316,19 @@
   (let [^Long v-min (read-min buff pos)
         ^Long u (read-u buff pos)]
     (prn "pos " pos " k " k " v-min " v-min  " u " u)
-
     (cond
-      (< k v-min)
-      (write-case-one index pos k data-id)
       (= -1 v-min)
       (write-case-two index pos k data-id)
-      (= -1 (read-cluster-ref buff pos (vutils/high u k)))
-      (write-case-three index pos k data-id)
+      (< k v-min)
+      (write-case-one index pos k data-id)
       :else
-      (write-case-four index pos k data-id))))
+      (if (> u 2)
+        (cond
+          (= -1 (read-cluster-ref buff pos (vutils/high u k)))
+          (write-case-three index pos k data-id)
+          :else
+          (write-case-four index pos k data-id))
+        (throw (Exception. (str "No space in index for u " u " pos " pos " k " k " v-min " v-min)))))))
 
 
 (defn v-insert! [index k data-id]
