@@ -14,15 +14,14 @@
 
 
 
+(defn p2 [x] (Math/pow 2 (* 2 x)))
+
+;;@TODO use index load and check autosizing
 (defspec check-inserts
          1
          (prop/for-all [n (gen/such-that #(and (> % 4) (< % 31)) gen/nat)]
-                       (let [u 16
-                             buff (Unpooled/buffer (+ 10
-                                                      (veb/node-byte-size 16)
-                                                      (* 4 (veb/node-byte-size 4))
-                                                      (* 8 (veb/node-byte-size 2))
-                                                      ))
+                       (let [u 36                           ;works with 35
+                             buff (Unpooled/buffer (* 5 1000000))
                              index {:buff buff :u u}]
 
                          ;create header and root node
@@ -33,12 +32,15 @@
                          (veb/write-position-pointer buff (+ 10 (veb/node-byte-size u)))
 
                          ;start inserting root not position is at 10
-                         (dotimes [i 16]
+                         (dotimes [i u]
                            (veb/v-insert! index i (+ 10 i)))
 
-                         (dotimes [i 16]
+                         (dotimes [i u]
                            (prn "read: " i " = " (veb/v-get index i)))
-
+                         (comment
+                           (dotimes [i 32]
+                             (prn "read: " i " = " (veb/v-get index i)))
+                           )
                          true
 
                          )))
@@ -49,7 +51,7 @@
            100
            (prop/for-all [node (gen/map (gen/elements [:min :max]) gen/nat)]
                          (let [node2 (merge {:min 0 :max 10 :u 2 :min-data 100} node)
-                               ^ByteBuf buff (Unpooled/buffer 33)
+                               ^ByteBuf buff (Unpooled/buffer 41)
                                {:keys [u max min]} (-> buff
                                                        (veb/write-node 0 node2)
                                                        (veb/read-node 0))]
@@ -66,7 +68,7 @@
 
                          (let [ u-sqrt (vebutils/upper-sqrt u)
                                 node2 (merge {:min 0 :max 10 :u u :min-data 100} node)
-                                ^ByteBuf buff (Unpooled/buffer (+ 33 (veb/cluster-byte-size u-sqrt)))
+                                ^ByteBuf buff (Unpooled/buffer (+ 41 (veb/cluster-byte-size u-sqrt)))
                                 {:keys [u max min]} (-> buff
                                                         (veb/write-node 0 node2)
                                                         (veb/read-node 0))]
@@ -84,7 +86,7 @@
 
                          (let [ u-sqrt (vebutils/upper-sqrt u)
                                 node2 (merge {:min 0 :max 10 :u u :min-data 100} node)
-                                ^ByteBuf buff (Unpooled/buffer (+ 33 (veb/cluster-byte-size u-sqrt)))
+                                ^ByteBuf buff (Unpooled/buffer (+ 41 (veb/cluster-byte-size u-sqrt)))
                                 ]
                            (veb/write-node buff 0 node2)
                            (and
@@ -103,7 +105,7 @@
 
                          (let [ u-sqrt (vebutils/upper-sqrt u)
                                 node2 (merge {:min 0 :max 10 :u u :min-data 100} node)
-                                ^ByteBuf buff (Unpooled/buffer (+ 33 (veb/cluster-byte-size u-sqrt)))
+                                ^ByteBuf buff (Unpooled/buffer (+ 41 (veb/cluster-byte-size u-sqrt)))
                                 ]
                            (doto buff (veb/write-node 0 node2))
 

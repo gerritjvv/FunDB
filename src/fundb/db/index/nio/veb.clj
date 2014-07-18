@@ -49,7 +49,7 @@
    Returns the buff"
   [^ByteBuf buff ^Long u]
   (if (> u 2)
-    (.writeBytes buff (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
+    (.writeBytes buff (byte-array (* (Math/ceil (vutils/veb-sqrt u)) (+ 4 2)) (byte INIT_CLUSTER_REF)))
     buff))
 
 (defn- ^ByteBuf put-init-cluster
@@ -57,7 +57,7 @@
    Returns the buff"
   [^ByteBuf buff ^Long pos ^Long u]
   (if (> u 2)
-    (.setBytes buff ^Long (+ pos 33) (byte-array (* (vutils/upper-sqrt u) (+ 4 2)) (byte INIT_CLUSTER_REF)))
+    (.setBytes buff ^Long (+ pos 41) (byte-array (* (Math/ceil (vutils/veb-sqrt u)) (+ 4 2)) (byte INIT_CLUSTER_REF)))
     buff))
 
 
@@ -116,11 +116,33 @@
   [^ByteBuf buff ^Long pos]
   (.getLong buff (+ pos 8 8 8 1)))
 
+
+(defn ^Long read-max
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos]
+  (.getLong buff (+ pos 8 8 8 1)))
+
+
 (defn ^ByteBuf write-max
   "@param buff ByteBuffer
    @param pos Long node position"
   [^ByteBuf buff ^Long pos ^Long v-max]
   (.setLong buff (+ pos 8 8 8 1) v-max))
+
+
+(defn ^ByteBuf write-max-data
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos ^Long v-max]
+  (.setLong buff (+ pos 8 8 8 8 1) v-max))
+
+
+(defn ^Long read-max-data
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos]
+  (.getLong buff (+ pos 8 8 8 8 1)))
 
 (defn ^Long read-min-data
   "@param buff ByteBuffer
@@ -141,10 +163,24 @@
    @param i cluster index
    @return Long"
   [^ByteBuf buff ^Long pos ^Long i]
+  (prn "read-cluster-ref: u: " (read-u buff pos) ", pos: " pos "[" i "]")
+  ;(if (= i 7 ) (throw (RuntimeException. "FUCK")))
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   ;(prn "read-cluster-ref pos: " (+ pos 8 8 8 8 1 (* i 6)) "; i: " i "; r: " (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
-  (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
+  (let [u (read-u buff pos)]
+    (if (or (zero? i) (< 0 i (Math/ceil (vutils/veb-sqrt u))))
+      (.getInt buff (+ pos 8 8 8 8 1 (* i 6)))
+      (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= u < " (vutils/upper-sqrt u)))))))
 
+(defn ^Long read-protected-cluster-ref
+  "Calls read-cluster-ref but checks first if i is in the expected range, otherwise throws an exception
+   u must be withing [0 .. upper-sqrt(u)-1] i.e 0 <= u < upper-sqrt(u)"
+  [^ByteBuf buff ^Long pos u ^Long i]
+  (if (or (zero? i) (< 0 i (Math/ceil (vutils/veb-sqrt u))))
+    (do
+      (prn "passed test u " u " sqrt: " (vutils/veb-sqrt u))
+      (read-cluster-ref buff pos i))
+    (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= u < " (vutils/upper-sqrt u))))))
 
 (defn ^ByteBuf write-cluster-ref
   "Write a cluster's ref and file index
@@ -181,7 +217,7 @@
   (* n 6))
 
 (defn ^Long node-byte-size [u]
-  (+ 33 (cluster-byte-size (vutils/upper-sqrt u))))
+  (+ 41 (cluster-byte-size (vutils/upper-sqrt u))))
 
 (defn ^Long init-file-size [u]
   (+ (count INDEX_HEADER) 1 4 (node-byte-size u)))
@@ -197,6 +233,8 @@
   (write-min buff pos min)
   (write-min-data buff pos min-data)
   (write-max buff pos max)
+  (write-max-data buff pos -1)
+
   (put-init-cluster buff pos u)
   buff)
 
@@ -212,8 +250,6 @@
       (read-max buff pos)
       pos))
 
-;@TODO create the index file, write headder, version and the root node
-;@TODO test get set position pointer
 (defn create-index
   "Create a new file and write the index header and root node"
   [f u]
@@ -256,6 +292,7 @@
   "check if the current buffer has capacity for the child insert
    if not the file is resized and a new buffer is created"
   [{:keys [^ByteBuf buff ^FileChannel file-channel] :as index} pos ^Long position-pointer]
+  (prn " >>>>>>>>>>>>>>>>> increase capacity")
   (let [u (read-u buff pos)
         child-u (vutils/upper-sqrt u)
         bts-size (node-byte-size child-u)]
@@ -285,7 +322,7 @@
 
 (defn- write-case-three [{:keys [^ByteBuf buff ^Long u] :as index} pos k data-id]
   (let [u (read-u buff pos)
-        child-u (vutils/lower-sqrt u)
+        child-u (vutils/upper-sqrt u)
         i (vutils/high u k)
         low (vutils/low u k)
         position-pointer (read-position-pointer buff)
@@ -306,14 +343,28 @@
 
 (defn- write-case-four [{:keys [buff] :as index} pos k data-id]
   (let [u (read-u buff pos)]
-    (prn "case-four u " u " k " k " low " (vutils/low u k))
+    ;(prn "case-four u " u " k " k " low " (vutils/low u k) "; high " (vutils/high u k) " read-cluster-ref " (read-cluster-ref buff pos (vutils/high u k)))
     (_insert! index
-              (read-cluster-ref buff pos (vutils/high u k))   ;get the next position from the cluster-ref
+              (read-protected-cluster-ref buff pos u (vutils/high u k))   ;get the next position from the cluster-ref
               (vutils/low u k)                              ;change k to low
               data-id)))
 
+(defn- write-case-five [{:keys [buff]} pos k data-id]
+  (let [v-max (read-max buff pos)]
+    ;note this expects u == 2 and v-min > -1
+    (if (> k v-max)
+      (do
+        (write-max buff pos k)
+        (write-max-data buff pos data-id))
+      (throw (Exception. (str "No space in index for u " (read-u buff pos) " pos " pos " k " k))))))
+
 (defn _insert! [{:keys [^ByteBuf buff] :as index} ^Long pos ^Long k ^Long data-id]
-  (let [^Long v-min (read-min buff pos)
+  (let [^Long v-min (try
+                      (read-min buff pos)
+                      (catch Exception e (do
+                                           (prn "k " k  "; u " (try (read-u pos) (catch Exception e nil)))
+                                           (throw e)
+                                           )))
         ^Long u (read-u buff pos)]
     (prn "pos " pos " k " k " v-min " v-min  " u " u)
     (cond
@@ -324,11 +375,14 @@
       :else
       (if (> u 2)
         (cond
-          (= -1 (read-cluster-ref buff pos (vutils/high u k)))
+          (= -1 (do
+                  (prn "investigate: u: " u  " k: " k  " high; " (vutils/high u k) " sqrt " (vutils/veb-sqrt u))
+                  ;here u 6 k 4 and high 2 upper-sqrt returns 2 instead of 3
+                  (read-protected-cluster-ref buff pos u (vutils/high u k))))
           (write-case-three index pos k data-id)
           :else
           (write-case-four index pos k data-id))
-        (throw (Exception. (str "No space in index for u " u " pos " pos " k " k " v-min " v-min)))))))
+        (write-case-five index pos k data-id)))))
 
 
 (defn v-insert! [index k data-id]
@@ -337,10 +391,13 @@
 
 (defn- _v-get [{:keys [buff] :as index} ^Long pos ^Long k]
   (let [v-min (read-min buff pos)
+        v-max (read-max buff pos)
         u (read-u buff pos)]
     (cond
       (= k v-min)
       (read-min-data buff pos)
+      (= k v-max)
+      (read-max-data buff pos)
       (> k v-min)
       (let [^Long pos2 (read-cluster-ref buff pos (vutils/high u k))]
         (when (> pos2 -1)
