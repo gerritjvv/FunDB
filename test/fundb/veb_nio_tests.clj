@@ -32,7 +32,7 @@
                          (veb/write-position-pointer buff (+ 10 (veb/node-byte-size u)))
 
                          ;start inserting root not position is at 10
-                         (dotimes [i u]
+                         (dotimes [i 37]
                            (veb/v-insert! index i (+ 10 i)))
 
                          (dotimes [i u]

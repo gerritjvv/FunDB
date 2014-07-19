@@ -387,7 +387,9 @@
 
 (defn v-insert! [index k data-id]
   (assert (and (number? k) (number? data-id)))
-  (_insert! index 10 k data-id))
+  (if (< k (read-u (:buff index) 10))
+    (_insert! index 10 k data-id)
+    (throw (IllegalArgumentException. (str "k [" k "] must be < u " (read-u (:buff index) 10))))))
 
 (defn- _v-get [{:keys [buff] :as index} ^Long pos ^Long k]
   (let [v-min (read-min buff pos)

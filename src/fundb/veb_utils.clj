@@ -1,14 +1,5 @@
 (ns fundb.veb-utils)
 
-
-(defn- perfect-square? [x]
-  (let [root (Math/floor (Math/pow x 0.5))]
-    (= (* root root) x)))
-
-(defn fib? [x]
-  (or (perfect-square? (+ (* x x 5) 4)) (perfect-square? (- (* x x 5) 4))))
-
-
 ;constants for log 2 calculations
 (defonce log2 (Math/log 2))
 ;the limit of u at which log2-int can be used, any value larger than this should use log2-long
@@ -51,3 +42,11 @@
   [u x y]
   (+ (* x (lower-sqrt u)) y))
 
+
+
+(defn max-values
+  "Calculates the max number of values a node can store"
+  [u]
+  (let [x (upper-sqrt u)]
+    (if (> x 2) (+ x (* x (max-values x)))
+                (+ x 2))))
