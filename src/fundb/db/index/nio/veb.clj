@@ -412,12 +412,12 @@
         rel-pos (relative-pos pos)
         v-max (read-max buff rel-pos)]
     ;note this expects u == 2 and v-min > -1
-    (if (> k v-max)
+    (if (>= k v-max)
       (do
         (write-max buff rel-pos k)
         (write-max-data buff rel-pos data-id)
         index2)
-      (throw (Exception. (str "No space in index for u " (read-u buff rel-pos) " pos " pos " k " k))))))
+      (throw (Exception. (str "No space in index for u " (read-u buff rel-pos) " pos " pos " k " k " v-max: " v-max))))))
 
 (defn- check-max [index pos ^Long v-max ^Long k data-id]
   (when (> k v-max)
@@ -477,10 +477,11 @@
       (read-min-data buff rel-pos)
       (= k v-max)
       (read-max-data buff rel-pos)
-      (> k v-min)
-      (let [^Long pos2 (read-cluster-ref buff rel-pos (vutils/high u k))]
-        (when (> pos2 -1)
-          (_v-get index pos2 (vutils/low u k)))))))
+      :else
+      (when (and (> u 2) (> k v-min))
+        (let [^Long pos2 (read-cluster-ref buff rel-pos (vutils/high u k))]
+          (when (> pos2 -1)
+            (_v-get index pos2 (vutils/low u k))))))))
 
 (defn v-get
   "Returns the data-id at value k if it exists, otherwise nil"
