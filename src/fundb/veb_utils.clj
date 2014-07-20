@@ -30,12 +30,12 @@
 (defn high
   "Calculates the high value of x taking into account u as a power of 2 where sqrt(u) is not an exact number"
   [u x]
-  (long (Math/floor (/ x (lower-sqrt u)))))
+  (long (Math/floor (/ x (upper-sqrt u)))))
 
 (defn low
   "Calculates the low value of x taking into account u as a power of 2 where sqrt(u) is not an exact number"
   [u x]
-  (long (mod x (lower-sqrt u))))
+  (long (mod x (upper-sqrt u))))
 
 (defn index
   "Calculates the index value of x taking into account u as a power of 2 where sqrt(u) is not an exact number"

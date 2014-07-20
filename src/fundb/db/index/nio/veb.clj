@@ -272,12 +272,12 @@
   (with-open [^FileChannel ch (-> f io/file (RandomAccessFile. "rw") .getChannel)]
     ;
     (let [^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (init-file-size u))
-          ^ByteBuf bb (Unpooled/wrappedBuffer mbb)]
-      (write-header bb)
-      (write-version bb)
-      (write-position-pointer bb 0)
-      (write-node bb 10 (->Node NOT_DELETED u -1 -1 -1 -1))
-      (write-position-pointer bb (.writerIndex bb))
+          ^ByteBuf buff (Unpooled/wrappedBuffer mbb)]
+      (write-header buff)
+      (write-version buff)
+      (write-position-pointer buff 10)
+      (write-node buff 10 (->Node NOT_DELETED u -1 -1 -1 -1))
+      (write-position-pointer buff (+ 10 (node-byte-size u)))
       (.force mbb)
       )))
 
@@ -367,7 +367,6 @@
         [child-buff index3] (get-page-buff (check-child-capacity index pos position-pointer) position-pointer) ;get the buff to insert the child
 
         ]
-    (prn "case3 position-pointer: " position-pointer)
 
     (write-node child-buff (relative-pos position-pointer) {:u child-u :min low :max low :min-data data-id})
     (write-cluster-ref buff rel-pos i position-pointer -1)
@@ -378,6 +377,7 @@
   (let [[buff index2] (get-page-buff index pos)
         rel-pos (relative-pos pos)
         u (read-u buff rel-pos)]
+    (prn "case four read-cluster-ref " (read-cluster-ref buff rel-pos (vutils/high u k)))
     (_insert! index2
               (read-cluster-ref buff rel-pos (vutils/high u k))   ;get the next position from the cluster-ref
               (vutils/low u k)                                      ;change k to low
@@ -400,9 +400,9 @@
         rel-pos (relative-pos pos)
         ^Long v-min (read-min buff rel-pos)
         ^Long u (read-u buff rel-pos)]
-
+    (prn "insert u: "  u " k: " k)
     (cond
-      (= -1 v-min)
+      (or (= -1 v-min) (= k v-min))                         ;overwrite if equal
       (write-case-two index2 pos k data-id)
       (< k v-min)
       (write-case-one index2 pos k data-id)

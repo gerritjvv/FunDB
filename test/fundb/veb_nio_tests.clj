@@ -17,10 +17,10 @@
 (defn p2 [x] (Math/pow 2 (* 2 x)))
 
 ;;@TODO use index load and check autosizing
-(defspec check-inserts
+(defspec check-inserts-no-file
          1
-         (prop/for-all [n (gen/such-that #(and (> % 4) (< % 31)) gen/nat)]
-                       (let [u 36                           ;works with 35
+         (prop/for-all [n gen/nat]
+                       (let [u 32
                              buff (Unpooled/buffer (* 5 1000000))
                              index {:pages {0 [buff nil]} :u u}]
 
@@ -32,18 +32,16 @@
                          (veb/write-position-pointer buff (+ 10 (veb/node-byte-size u)))
 
                          ;start inserting root not position is at 10
-                         (dotimes [i 36]
+                         (dotimes [i u]
                            (veb/v-insert! index i (+ 10 i)))
 
                          (dotimes [i u]
                            (prn "read: " i " = " (veb/v-get index i)))
-                         (comment
-                           (dotimes [i 32]
-                             (prn "read: " i " = " (veb/v-get index i)))
-                           )
+
                          true
 
                          )))
+
 (comment
 
 
