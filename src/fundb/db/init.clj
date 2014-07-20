@@ -1,7 +1,7 @@
 (ns fundb.db.init
   "Load database and table definitions into memory"
   (:require [clojure.edn :as edn]
-            [fundb.db.index.veb-storage :as veb-storage])
+            [fundb.db.index.nio.veb :as veb-storage])
   (:import [java.io File]))
 
 
