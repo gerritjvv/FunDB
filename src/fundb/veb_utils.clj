@@ -40,7 +40,7 @@
 (defn index
   "Calculates the index value of x taking into account u as a power of 2 where sqrt(u) is not an exact number"
   [u x y]
-  (+ (* x (lower-sqrt u)) y))
+  (+ (* x (upper-sqrt u)) y))
 
 (defn max-number-of-nodes
   "Calculates the max number of nodes a tree will create"

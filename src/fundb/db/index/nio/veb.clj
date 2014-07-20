@@ -21,6 +21,7 @@
 ;cluster-pos the position at which the cluster for the node starts
 (defrecord Node [deleted ^Long u ^Long min ^Long min-data ^Long max ^Long cluster-pos])
 (defrecord Index [^Long u pages ^FileChannel file-channel])
+(defrecord DataItem [^Long data ^Boolean deleted ^Long pos])
 
 (declare cluster-byte-size)
 
@@ -112,6 +113,13 @@
    @param pos Long node position"
   [^ByteBuf buff ^Long pos]
   (= (.getByte buff pos) DELETED))
+
+
+(defn write-deleted
+  "@param buff ByteBuffer
+   @param pos Long node position"
+  [^ByteBuf buff ^Long pos ^Boolean deleted]
+  (= (.setByte buff pos (if deleted DELETED NOT_DELETED))))
 
 (defn read-u
   [^ByteBuf buff ^Long pos]
@@ -474,9 +482,9 @@
         u (read-u buff rel-pos)]
     (cond
       (= k v-min)
-      (read-min-data buff rel-pos)
+      (->DataItem (read-min-data buff rel-pos) (read-deleted buff rel-pos) pos)
       (= k v-max)
-      (read-max-data buff rel-pos)
+      (->DataItem (read-max-data buff rel-pos) (read-deleted buff rel-pos) pos)
       :else
       (when (and (> u 2) (> k v-min))
         (let [^Long pos2 (read-cluster-ref buff rel-pos (vutils/high u k))]
@@ -489,6 +497,21 @@
   (when (and k (< k (read-u (first (get-page-buff index 0)) 10)))
     (_v-get index 10 k)))
 
+(defn v-delete [index k]
+  "Sets the delete flagto true if the key exists"
+  (when k
+    (when-let [data-item (v-get index k)]
+      (let [{:keys [data deleted pos]}  data-item]
+        (if (false? deleted)
+          (write-deleted (first (get-page-buff index pos)) pos true))))))
+
+(defn v-undelete [index k]
+  "Sets the delete flag to false if the key exists"
+  (when k
+    (when-let [data-item (v-get index k)]
+      (let [{:keys [data deleted pos]}  data-item]
+        (if (true? deleted)
+          (write-deleted (first (get-page-buff index pos)) pos false))))))
 
 (defn max-number-of-bytes
   "Calculates the max number of bytes a tree will use"
@@ -496,3 +519,58 @@
   (let [x (vutils/upper-sqrt u)]
     (if (> x 2) (+ (node-byte-size x) (* x (max-number-of-bytes x)))
                 (node-byte-size 2))))
+
+
+(defn- find-next-cluster-i
+  "Simple loop to find the next 'set' cluster-ref, if none is found returns nil"
+  [index u pos h]
+  (let [[buff _] (get-page-buff index pos)
+        rel-pos (relative-pos pos)]
+    (loop [i (inc h)]
+      (when (< i (vutils/upper-sqrt u))
+        (let [cluster-ref (read-cluster-ref buff rel-pos i)]
+          (if (> cluster-ref -1)
+            i
+            (recur (inc i))))))))
+
+(defn- _succ-read-max [index cluster-ref]
+  (read-max (first (get-page-buff index cluster-ref)) cluster-ref))
+
+(defn _successor [index pos k]
+  (let [[buff _] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        u (read-u buff rel-pos)
+        min-v (read-min buff rel-pos)
+        max-v (read-max buff rel-pos)]
+
+    (cond
+      (= u 2)
+             (if (and (= k 0) (= max-v 1)) 1)
+      (and (> min-v -1) (< k min-v))
+             min-v
+      :else                                                 ;navigate the tree
+      (let [h (vutils/high u k)
+            l (vutils/low u k)
+            cluster-ref (read-cluster-ref buff rel-pos h)
+            max-low (if (and cluster-ref (> cluster-ref -1)) (_succ-read-max index cluster-ref))]
+
+        (if (and max-low (< l max-low)) ;value is in current sub tree
+          (when-let [succ (_successor index cluster-ref l)]
+            (vutils/index u h succ))
+          (let [next-cluster-i (find-next-cluster-i index u pos h)] ;value is not in current tree, find next cluster
+            (when next-cluster-i
+              (let [next-cluster-ref (read-cluster-ref buff pos next-cluster-i)
+                    [next-buff _] (get-page-buff index next-cluster-ref)
+                    next-min-v (read-min next-buff next-cluster-ref)]
+                (vutils/index u next-cluster-i next-min-v)))))))))
+
+
+(defn v-successor [index k]
+  (if k
+    (_successor index 10 k)))
+
+(defn v-successor-seq [index k]
+  (take-while (complement nil?) (iterate (partial v-successor index) k)))
+
+(defn v-data-seq [index k]
+  (map (partial v-get index) (v-successor-seq index k)))

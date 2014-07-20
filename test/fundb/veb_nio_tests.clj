@@ -12,34 +12,39 @@
 
 (def all-true? (partial reduce #(and %1 %2) true))
 
-(defspec check-insert-uuids-file
+(defspec check-succ
          1
          (prop/for-all [n gen/nat]
-                       (let [u Integer/MAX_VALUE
-                             index (veb/create-load-index "target/test/check-inserts-uuids-file/test.dat" u)
-                             uuids (take (Math/min (long 10000) (long u)) (repeatedly #(-> (java.util.UUID/randomUUID) str (.hashCode) (Math/abs) (int))))
-                             index2 (reduce (fn [index i]
-                                              (veb/v-insert! index i i)) index uuids)
-                             ]
-
-
-                         ;start inserting root not position is at 10
-
-
-                         (doseq [i uuids]
-                           (prn "read: " i " = " (veb/v-get index2 i))
-                           (if (not= i (veb/v-get index2 i))
-                             (prn "No much " i (veb/v-get index2 i))))
-
-                         (prn "max-data: " (veb/v-max index))
-                         (prn "min-data: " (veb/v-min index))
-
-                         (all-true? (map #(= % (veb/v-get index2 %)) uuids))
-
-                         )))
+                       (let [u 16])))
 
 
 (comment
+
+  (defspec check-insert-uuids-file
+           1
+           (prop/for-all [n gen/nat]
+                         (let [u Integer/MAX_VALUE
+                               index (veb/create-load-index "target/test/check-inserts-uuids-file/test.dat" u)
+                               uuids (take (Math/min (long 10000) (long u)) (repeatedly #(-> (java.util.UUID/randomUUID) str (.hashCode) (Math/abs) (int))))
+                               index2 (reduce (fn [index i]
+                                                (veb/v-insert! index i i)) index uuids)
+                               ]
+
+
+                           ;start inserting root not position is at 10
+
+
+                           (doseq [i uuids]
+                             (prn "read: " i " = " (veb/v-get index2 i))
+                             (if (not= i (veb/v-get index2 i))
+                               (prn "No much " i (veb/v-get index2 i))))
+
+                           (prn "max-data: " (veb/v-max index))
+                           (prn "min-data: " (veb/v-min index))
+
+                           (all-true? (map #(= % (veb/v-get index2 %)) uuids))
+
+                           )))
 
   (defspec check-inserts-file
            10
