@@ -35,7 +35,7 @@
 (defn- ^ByteBuf load-page-buff [^FileChannel file-channel ^Long page]
   (let [size (.size file-channel)
         ^Long start (* page PAGE_SIZE)
-        pos-end (> size (+ start PAGE_SIZE)) PAGE_SIZE size
+        pos-end PAGE_SIZE;(> size (+ start PAGE_SIZE)) PAGE_SIZE size
         mmap (.map file-channel FileChannel$MapMode/READ_WRITE start pos-end)]
     [(Unpooled/wrappedBuffer mmap) mmap]))
 
@@ -188,7 +188,7 @@
    @param i cluster index
    @return Long"
   [^ByteBuf buff ^Long pos ^Long i]
-  (prn "read-cluster-ref: u: " (read-u buff pos) ", pos: " pos "[" i "]")
+  ;(prn "read-cluster-ref: u: " (read-u buff pos) ", pos: " pos "[" i "]")
   ;(if (= i 7 ) (throw (RuntimeException. "FUCK")))
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
   ;(prn "read-cluster-ref pos: " (+ pos 8 8 8 8 1 (* i 6)) "; i: " i "; r: " (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
@@ -293,7 +293,7 @@
   [f]
   (let [^File file (io/file f)
         ^FileChannel ch (-> file (RandomAccessFile. "rw") .getChannel)
-        ^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (.length file))
+        ^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 PAGE_SIZE)
         ^ByteBuf bb (Unpooled/wrappedBuffer mbb)
         header (read-header bb)
         version (read-version bb)]
@@ -318,7 +318,7 @@
   (if (> size PAGE_SIZE) PAGE_SIZE size))
 
 (defn- increase-buff-capacity [{:keys [^FileChannel file-channel] :as index} ^ByteBuf buff pos ^Long bts-size]
-  (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (within-page-size (+ (* 10 bts-size) (.capacity buff))))]
+  (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (within-page-size (+ (* 1000 bts-size) (.capacity buff))))]
     (assoc-in
       (assoc index :file-channel file-channel)
       [:pages (calc-page pos)]
@@ -328,18 +328,18 @@
   "check if the current buffer has capacity for the child insert
    if not the file is resized and a new buffer is created"
   [{:keys [pages ^FileChannel file-channel] :as index} pos ^Long position-pointer]
-  (prn " >>>>>>>>>>>>>>>>> increase capacity")
+  ;(prn " >>>>>>>>>>>>>>>>> increase capacity")
   (let [[buff index2] (get-page-buff index pos)
         rel-pos (relative-pos pos)
         u (read-u buff rel-pos)
         child-u (vutils/upper-sqrt u)
         bts-size (node-byte-size child-u)]
-    (prn " increase-capacity: bts-size: " bts-size " u: " u " buff: " buff " rel-pos: " rel-pos)
+    ;(prn " increase-capacity: bts-size: " bts-size " u: " u " buff: " buff " rel-pos: " rel-pos)
     (cond
-      (> (+ bts-size (.capacity buff)) PAGE_SIZE)           ;safety check that we never overflow the current buffer
-      (throw (RuntimeException. (str "The bts-size[ " bts-size " ] + buff.capacity[ " (.capacity buff) " ] cannot be bigger than PAGE_SIZE[ "  PAGE_SIZE " ]")))
       (>= bts-size (- (.capacity buff) (relative-pos position-pointer)))
-      (increase-buff-capacity index2 buff pos bts-size)
+       (if (> (+ bts-size (.capacity buff)) PAGE_SIZE)           ;safety check that we never overflow the current buffer
+         (throw (RuntimeException. (str "The bts-size[ " bts-size " ] + buff.capacity[ " (.capacity buff) " ] cannot be bigger than PAGE_SIZE[ "  PAGE_SIZE " ]")))
+         (increase-buff-capacity index2 buff pos bts-size))
       :else index2)))
 
 (defn- write-case-one
@@ -391,10 +391,8 @@
   [index u parent-pos child-pos]
   (let [[buff index2] (get-page-buff index parent-pos)
         [child-buff index2] (get-page-buff index child-pos)]
-    (if (and
-          (= buff child-buff)
-          (>= (relative-pos child-pos) (.capacity child-buff)))
-      (increase-buff-capacity index child-pos (node-byte-size u))
+    (if (>= (relative-pos child-pos) (.capacity child-buff))
+      (increase-buff-capacity index child-buff child-pos (node-byte-size u))
       index)))
 
 (defn- write-case-four [index pos k data-id]
@@ -422,11 +420,11 @@
 
 (defn _insert! [index ^Long pos ^Long k ^Long data-id]
   (let [[buff index2] (get-page-buff index pos)
-        _ (do (prn "page buff " pos " => " buff))
+        ;_ (do (prn "page buff " pos " => " buff))
         rel-pos (relative-pos pos)
         ^Long v-min (read-min buff rel-pos)
         ^Long u (read-u buff rel-pos)]
-    (prn "insert u: "  u " k: " k)
+    ;(prn "insert u: "  u " k: " k)
     (cond
       (or (= -1 v-min) (= k v-min))                         ;overwrite if equal
       (write-case-two index2 pos k data-id)

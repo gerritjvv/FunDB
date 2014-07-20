@@ -14,8 +14,8 @@
 
 
 (defspec check-inserts-file
-         1
-         (prop/for-all [n (gen/such-that #(< 1024 % Integer/MAX_VALUE) gen/nat)]
+         10
+         (prop/for-all [n (gen/such-that #(< 1024 % 10000) gen/nat)]
                        (let [u n
                              buff (Unpooled/buffer (* 5 1000000))
                              index (veb/create-load-index "target/test/check-inserts-file/test.dat" u)
@@ -23,9 +23,11 @@
 
 
                          ;start inserting root not position is at 10
-                         (dotimes [i u]
-                           (prn "u " u " i " i)
-                           (veb/v-insert! index i (+ 10 i)))
+                         (time
+                           (dotimes [i u]
+                             (if (zero? (mod i 10000))
+                               (prn "u " u " i " i " perc: " (double (* 100 (/ i u))) " %"))
+                             (veb/v-insert! index i (+ 10 i))))
 
                          (dotimes [i u]
                            (prn "read: " i " = " (veb/v-get index i)))
