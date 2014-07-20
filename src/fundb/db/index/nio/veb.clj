@@ -194,7 +194,7 @@
   ;(prn "read-cluster-ref pos: " (+ pos 8 8 8 8 1 (* i 6)) "; i: " i "; r: " (.getInt buff (+ pos 8 8 8 8 1 (* i 6))))
   (let [u (read-u buff pos)]
     (if (or (zero? i) (< 0 i (Math/ceil (vutils/veb-sqrt u))))
-      (.getInt buff (+ pos 8 8 8 8 1 (* i 6)))
+      (.getInt buff (+ pos 8 8 8 8 8 1 (* i 6)))
       (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= u < " (vutils/upper-sqrt u)))))))
 
 (defn ^ByteBuf write-cluster-ref
@@ -207,7 +207,7 @@
    @return ByteBuffer"
   [^ByteBuf buff ^Long pos ^Long i ^Long r ^Long f-i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
-  (let [pos1 (+ pos 8 8 8 8 1 (* i 6))]
+  (let [pos1 (+ pos 8 8 8 8 8 1 (* i 6))]
     ;(prn "write-cluster-ref pos: " pos1 "; i: " i  "; r: " r)
     (doto buff
       (.setInt pos1 (int r))
@@ -222,7 +222,7 @@
    @return Short cluster's file index"
   [^ByteBuf buff ^Long pos ^Long i]
   ;remember a cluster ref is 4 byte index 2 bytes (short) file index
-  (.getShort buff (+ pos 8 8 8 8 1 4 (* i 6))))
+  (.getShort buff (+ pos 8 8 8 8 8 1 4 (* i 6))))
 
 
 (defn ^Long cluster-byte-size
@@ -399,6 +399,7 @@
   (let [[buff index2] (get-page-buff index pos)
         rel-pos (relative-pos pos)
         u (read-u buff rel-pos)
+        _ (do (prn "u: " u " k: " k))
         child-pos (read-cluster-ref buff rel-pos (vutils/high u k))]
 
     (_insert! (check-buff-loaded index2 u pos child-pos)
@@ -418,27 +419,45 @@
         index2)
       (throw (Exception. (str "No space in index for u " (read-u buff rel-pos) " pos " pos " k " k))))))
 
+(defn- check-max [index pos ^Long v-max ^Long k data-id]
+  (when (> k v-max)
+    (let [buff (first (get-page-buff index pos))
+          rel-pos (relative-pos pos)]
+      (write-max buff rel-pos k)
+      (write-max-data buff rel-pos data-id)))
+  index)
+
 (defn _insert! [index ^Long pos ^Long k ^Long data-id]
   (let [[buff index2] (get-page-buff index pos)
         ;_ (do (prn "page buff " pos " => " buff))
         rel-pos (relative-pos pos)
         ^Long v-min (read-min buff rel-pos)
+        ^Long v-max (read-max buff rel-pos)
         ^Long u (read-u buff rel-pos)]
     ;(prn "insert u: "  u " k: " k)
+
     (cond
       (or (= -1 v-min) (= k v-min))                         ;overwrite if equal
       (write-case-two index2 pos k data-id)
       (< k v-min)
       (write-case-one index2 pos k data-id)
       :else
-      (if (> u 2)
-        (cond
-          (= -1 (read-cluster-ref buff rel-pos (vutils/high u k)))
-          (write-case-three index2 pos k data-id)
-          :else
-          (write-case-four index2 pos k data-id))
+      (if (> u 2)                                           ;
+        (check-max
+          (cond
+            (= -1 (read-cluster-ref buff rel-pos (vutils/high u k)))
+            (write-case-three index2 pos k data-id)
+            :else
+            (write-case-four index2 pos k data-id)) pos v-max k data-id)
         (write-case-five index2 pos k data-id)))))
 
+
+(defn v-max [index]
+  (read-max (first (get-page-buff index 0)) 10))
+
+
+(defn v-min [index]
+  (read-min (first (get-page-buff index 0)) 10))
 
 (defn v-insert!
   "Insert k with data data-id into the index and returns the new index"

@@ -12,31 +12,56 @@
 
 (def all-true? (partial reduce #(and %1 %2) true))
 
-
-(defspec check-inserts-file
-         10
-         (prop/for-all [n (gen/such-that #(< 1024 % 10000) gen/nat)]
-                       (let [u n
-                             buff (Unpooled/buffer (* 5 1000000))
-                             index (veb/create-load-index "target/test/check-inserts-file/test.dat" u)
+(defspec check-insert-uuids-file
+         1
+         (prop/for-all [n gen/nat]
+                       (let [u Integer/MAX_VALUE
+                             index (veb/create-load-index "target/test/check-inserts-uuids-file/test.dat" u)
+                             uuids (take (Math/min (long 10000) (long u)) (repeatedly #(-> (java.util.UUID/randomUUID) str (.hashCode) (Math/abs) (int))))
+                             index2 (reduce (fn [index i]
+                                              (veb/v-insert! index i i)) index uuids)
                              ]
 
 
                          ;start inserting root not position is at 10
-                         (time
-                           (dotimes [i u]
-                             (if (zero? (mod i 10000))
-                               (prn "u " u " i " i " perc: " (double (* 100 (/ i u))) " %"))
-                             (veb/v-insert! index i (+ 10 i))))
 
-                         (dotimes [i u]
-                           (prn "read: " i " = " (veb/v-get index i)))
 
-                         (all-true? (map (partial veb/v-get index) (range u)))
+                         (doseq [i uuids]
+                           (prn "read: " i " = " (veb/v-get index2 i))
+                           (if (not= i (veb/v-get index2 i))
+                             (prn "No much " i (veb/v-get index2 i))))
+
+                         (prn "max-data: " (veb/v-max index))
+                         (prn "min-data: " (veb/v-min index))
+
+                         (all-true? (map #(= % (veb/v-get index2 %)) uuids))
 
                          )))
 
+
 (comment
+
+  (defspec check-inserts-file
+           10
+           (prop/for-all [n (gen/such-that #(< 1024 % 10000) gen/nat)]
+                         (let [u n
+                               index (veb/create-load-index "target/test/check-inserts-file/test.dat" u)
+                               ]
+
+
+                           ;start inserting root not position is at 10
+                           (time
+                             (dotimes [i u]
+                               (if (zero? (mod i 10000))
+                                 (prn "u " u " i " i " perc: " (double (* 100 (/ i u))) " %"))
+                               (veb/v-insert! index i (+ 10 i))))
+
+                           (dotimes [i u]
+                             (prn "read: " i " = " (veb/v-get index i)))
+
+                           (all-true? (map (partial veb/v-get index) (range u)))
+
+                           )))
 
 
   (defspec check-inserts-no-file
