@@ -13,26 +13,18 @@
 (def all-true? (partial reduce #(and %1 %2) true))
 
 
-
-(defn p2 [x] (Math/pow 2 (* 2 x)))
-
-;;@TODO use index load and check autosizing
-(defspec check-inserts-no-file
-         10
-         (prop/for-all [n (gen/such-that #{16 32 36} gen/nat)]
+(defspec check-inserts-file
+         1
+         (prop/for-all [n (gen/such-that #(< 1024 % Integer/MAX_VALUE) gen/nat)]
                        (let [u n
                              buff (Unpooled/buffer (* 5 1000000))
-                             index {:pages {0 [buff nil]} :u u}]
+                             index (veb/create-load-index "target/test/check-inserts-file/test.dat" u)
+                             ]
 
-                         ;create header and root node
-                         (veb/write-header buff)
-                         (veb/write-version buff)
-                         (veb/write-position-pointer buff 10)
-                         (veb/write-node buff 10 (veb/->Node veb/NOT_DELETED u -1 -1 -1 -1))
-                         (veb/write-position-pointer buff (+ 10 (veb/node-byte-size u)))
 
                          ;start inserting root not position is at 10
                          (dotimes [i u]
+                           (prn "u " u " i " i)
                            (veb/v-insert! index i (+ 10 i)))
 
                          (dotimes [i u]
@@ -45,6 +37,30 @@
 (comment
 
 
+  (defspec check-inserts-no-file
+           10
+           (prop/for-all [n (gen/such-that #{16 32 36} gen/nat)]
+                         (let [u n
+                               buff (Unpooled/buffer (* 5 1000000))
+                               index {:pages {0 [buff nil]} :u u}]
+
+                           ;create header and root node
+                           (veb/write-header buff)
+                           (veb/write-version buff)
+                           (veb/write-position-pointer buff 10)
+                           (veb/write-node buff 10 (veb/->Node veb/NOT_DELETED u -1 -1 -1 -1))
+                           (veb/write-position-pointer buff (+ 10 (veb/node-byte-size u)))
+
+                           ;start inserting root not position is at 10
+                           (dotimes [i u]
+                             (veb/v-insert! index i (+ 10 i)))
+
+                           (dotimes [i u]
+                             (prn "read: " i " = " (veb/v-get index i)))
+
+                           (all-true? (map (partial veb/v-get index) (range u)))
+
+                           )))
   (defspec write-read-node-no-cluster
            100
            (prop/for-all [node (gen/map (gen/elements [:min :max]) gen/nat)]

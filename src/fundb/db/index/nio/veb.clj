@@ -269,9 +269,15 @@
 (defn create-index
   "Create a new file and write the index header and root node"
   [f u]
+
+  (io/delete-file f :silently)
+  (io/make-parents f)
+
   (with-open [^FileChannel ch (-> f io/file (RandomAccessFile. "rw") .getChannel)]
     ;
-    (let [^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (init-file-size u))
+    (let [^MappedByteBuffer mbb (.map ch FileChannel$MapMode/READ_WRITE 0 (+
+                                                                            (init-file-size u)
+                                                                            (* (node-byte-size u) 10)))
           ^ByteBuf buff (Unpooled/wrappedBuffer mbb)]
       (write-header buff)
       (write-version buff)
@@ -294,6 +300,9 @@
     (assert (and (= header INDEX_HEADER) (= version VERSION)) (str "Wrong index version and or header version: " version  " head: " header))
     (Index. (read-u bb 10) {0 [bb mbb]} ch)))
 
+(defn create-load-index [f u]
+  (create-index f u)
+  (load-index f))
 
 (defn close-index!
   "Force edits and close the index"
@@ -308,6 +317,13 @@
 (defn- within-page-size [size]
   (if (> size PAGE_SIZE) PAGE_SIZE size))
 
+(defn- increase-buff-capacity [{:keys [^FileChannel file-channel] :as index} ^ByteBuf buff pos ^Long bts-size]
+  (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (within-page-size (+ (* 10 bts-size) (.capacity buff))))]
+    (assoc-in
+      (assoc index :file-channel file-channel)
+      [:pages (calc-page pos)]
+      [(Unpooled/wrappedBuffer ^ByteBuffer mmap) mmap])))
+
 (defn- check-child-capacity
   "check if the current buffer has capacity for the child insert
    if not the file is resized and a new buffer is created"
@@ -318,16 +334,12 @@
         u (read-u buff rel-pos)
         child-u (vutils/upper-sqrt u)
         bts-size (node-byte-size child-u)]
-
+    (prn " increase-capacity: bts-size: " bts-size " u: " u " buff: " buff " rel-pos: " rel-pos)
     (cond
       (> (+ bts-size (.capacity buff)) PAGE_SIZE)           ;safety check that we never overflow the current buffer
       (throw (RuntimeException. (str "The bts-size[ " bts-size " ] + buff.capacity[ " (.capacity buff) " ] cannot be bigger than PAGE_SIZE[ "  PAGE_SIZE " ]")))
       (>= bts-size (- (.capacity buff) (relative-pos position-pointer)))
-      (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (within-page-size (+ (* 10 bts-size) (.capacity buff))))]
-        (assoc-in
-          (assoc index2 :file-channel file-channel)
-          [:pages (calc-page pos)]
-          [(Unpooled/wrappedBuffer ^ByteBuffer mmap) mmap]))
+      (increase-buff-capacity index2 buff pos bts-size)
       :else index2)))
 
 (defn- write-case-one
@@ -373,13 +385,26 @@
     (write-index-position-pointer index3 updated-pointer)
     index3))
 
+(defn- check-buff-loaded
+  "Checks that enough of the buffer is loaded to cover the position, only if the parent and child position
+   belong to the same page"
+  [index u parent-pos child-pos]
+  (let [[buff index2] (get-page-buff index parent-pos)
+        [child-buff index2] (get-page-buff index child-pos)]
+    (if (and
+          (= buff child-buff)
+          (>= (relative-pos child-pos) (.capacity child-buff)))
+      (increase-buff-capacity index child-pos (node-byte-size u))
+      index)))
+
 (defn- write-case-four [index pos k data-id]
   (let [[buff index2] (get-page-buff index pos)
         rel-pos (relative-pos pos)
-        u (read-u buff rel-pos)]
-    (prn "case four read-cluster-ref " (read-cluster-ref buff rel-pos (vutils/high u k)))
-    (_insert! index2
-              (read-cluster-ref buff rel-pos (vutils/high u k))   ;get the next position from the cluster-ref
+        u (read-u buff rel-pos)
+        child-pos (read-cluster-ref buff rel-pos (vutils/high u k))]
+
+    (_insert! (check-buff-loaded index2 u pos child-pos)
+              child-pos   ;get the next position from the cluster-ref
               (vutils/low u k)                                      ;change k to low
               data-id)))
 
@@ -397,6 +422,7 @@
 
 (defn _insert! [index ^Long pos ^Long k ^Long data-id]
   (let [[buff index2] (get-page-buff index pos)
+        _ (do (prn "page buff " pos " => " buff))
         rel-pos (relative-pos pos)
         ^Long v-min (read-min buff rel-pos)
         ^Long u (read-u buff rel-pos)]
