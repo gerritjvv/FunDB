@@ -42,11 +42,10 @@
   [u x y]
   (+ (* x (lower-sqrt u)) y))
 
-
-
-(defn max-values
-  "Calculates the max number of values a node can store"
+(defn max-number-of-nodes
+  "Calculates the max number of nodes a tree will create"
   [u]
   (let [x (upper-sqrt u)]
-    (if (> x 2) (+ x (* x (max-values x)))
-                (+ x 2))))
+    (if (> x 2) (+ x (* x (max-number-of-nodes x)))
+                2)))
+

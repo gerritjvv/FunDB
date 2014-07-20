@@ -1,4 +1,5 @@
 (ns fundb.db.index.nio.veb
+  "Reading and writing a VEB Index to a File using FileChannel MappedByteBuffer"
   (:require [fundb.veb-utils :as vutils]
             [clojure.java.io :as io])
   (:import
@@ -12,37 +13,61 @@
 (def ^Long DELETED 1)
 (def ^Long INIT_CLUSTER_REF -1)
 
-;Bytes
-;Description
-;5
-;FUNDB header
-;1
-;Index version
-;4
-;Free position pointer i.e points to the index of the next free index
-;82 bytes
-;Root Node
-;82 | 60
-;Next node | Cluster Ref Segment
-;[1 byte of which  the first bit is a tombstone flag bit 1 == deleted][8 bytes u][8 bytes min][8 bytes min-data][8 bytes max]
 
 (def ^"[B" INDEX_HEADER (.getBytes (String. "FUNDB")))
 
+(defonce ^Long PAGE_SIZE Integer/MAX_VALUE)
+
 ;cluster-pos the position at which the cluster for the node starts
 (defrecord Node [deleted ^Long u ^Long min ^Long min-data ^Long max ^Long cluster-pos])
-(defrecord Index [^Long u ^ByteBuf buff ^MappedByteBuffer mbuff ^FileChannel file-channel])
+(defrecord Index [^Long u pages ^FileChannel file-channel])
 
 (declare cluster-byte-size)
+
+(defn- ^Long calc-page [^Long pos]
+  (long (Math/floor (/ pos PAGE_SIZE))))
+
+(defn ^Long relative-pos
+  "Pos spans multiple pages this function returns the relative position inside a page"
+  [pos]
+  (mod pos PAGE_SIZE))
+
+(defn- ^ByteBuf load-page-buff [^FileChannel file-channel ^Long page]
+  (let [size (.size file-channel)
+        ^Long start (* page PAGE_SIZE)
+        pos-end (> size (+ start PAGE_SIZE)) PAGE_SIZE size
+        mmap (.map file-channel FileChannel$MapMode/READ_WRITE start pos-end)]
+    [(Unpooled/wrappedBuffer mmap) mmap]))
+
+(defn get-page-buff
+  "May modify the index so that the new index is returned as the second parameter in the return tuple
+   Returns [^ByteBuf buff index]"
+  [{:keys [pages file-channel] :as index} ^Long pos]
+  (let [page (calc-page pos)
+        page-buff (first (get pages page))]
+    (if page-buff
+      [page-buff index]
+      (let [v (load-page-buff file-channel page)]
+        [(first v) (assoc pages page v)]))))
+
 
 (defn ^ByteBuf write-position-pointer
   "Note: this function does not alter the bb position"
   [^ByteBuf bb ^Long pointer]
   (.setInt bb 6 (int pointer)))
 
+(defn ^ByteBuf write-index-position-pointer
+  "Note: this function does not alter the bb position"
+  [index ^Long pointer]
+  (write-position-pointer (first (get-page-buff index 0)) pointer))
+
 (defn ^Long read-position-pointer
   "Note: this function does not alter the bb position"
   ([^ByteBuf bb]
    (.getInt bb 6)))
+
+(defn ^Long read-index-position-pointer [index]
+  (read-position-pointer (first (get-page-buff index 0))))
 
 (defn- ^ByteBuf put-init-cluster!
   "Write a (* sqrt (+ 4 2)) byte array to the buff starting at the current position
@@ -172,16 +197,6 @@
       (.getInt buff (+ pos 8 8 8 8 1 (* i 6)))
       (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= u < " (vutils/upper-sqrt u)))))))
 
-(defn ^Long read-protected-cluster-ref
-  "Calls read-cluster-ref but checks first if i is in the expected range, otherwise throws an exception
-   u must be withing [0 .. upper-sqrt(u)-1] i.e 0 <= u < upper-sqrt(u)"
-  [^ByteBuf buff ^Long pos u ^Long i]
-  (if (or (zero? i) (< 0 i (Math/ceil (vutils/veb-sqrt u))))
-    (do
-      (prn "passed test u " u " sqrt: " (vutils/veb-sqrt u))
-      (read-cluster-ref buff pos i))
-    (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= u < " (vutils/upper-sqrt u))))))
-
 (defn ^ByteBuf write-cluster-ref
   "Write a cluster's ref and file index
    @param buff ByteBuffer
@@ -248,6 +263,7 @@
       (read-min buff pos)
       (read-min-data buff pos)
       (read-max buff pos)
+
       pos))
 
 (defn create-index
@@ -265,7 +281,7 @@
       (.force mbb)
       )))
 
-;(defrecord Index [^Long u ^ByteBuf buff ^MappedByteBuffer mbuff ^FileChannel file-channel])
+;(defrecord Index [^Long u pages ^FileChannel file-channel])
 (defn load-index
   "Load the start information for the index to be read"
   [f]
@@ -276,137 +292,163 @@
         header (read-header bb)
         version (read-version bb)]
     (assert (and (= header INDEX_HEADER) (= version VERSION)) (str "Wrong index version and or header version: " version  " head: " header))
-    (Index. (read-u bb 10) bb mbb ch)))
+    (Index. (read-u bb 10) {0 [bb mbb]} ch)))
 
 
 (defn close-index!
   "Force edits and close the index"
-  [{:keys [^MappedByteBuffer mbuff ^FileChannel file-channel]}]
-  (.force mbuff)
+  [{:keys [^FileChannel file-channel pages]}]
+  (doseq [[_ [_ ^MappedByteBuffer mmap]] pages]
+    (.force mmap))
   (.close file-channel))
 
 
 (declare _insert!)
 
+(defn- within-page-size [size]
+  (if (> size PAGE_SIZE) PAGE_SIZE size))
+
 (defn- check-child-capacity
   "check if the current buffer has capacity for the child insert
    if not the file is resized and a new buffer is created"
-  [{:keys [^ByteBuf buff ^FileChannel file-channel] :as index} pos ^Long position-pointer]
+  [{:keys [pages ^FileChannel file-channel] :as index} pos ^Long position-pointer]
   (prn " >>>>>>>>>>>>>>>>> increase capacity")
-  (let [u (read-u buff pos)
+  (let [[buff index2] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        u (read-u buff rel-pos)
         child-u (vutils/upper-sqrt u)
         bts-size (node-byte-size child-u)]
-    (if (>= bts-size (- (.capacity buff) position-pointer))
-      (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (+ (* 10 bts-size) (.capacity buff)))]
 
-        (assoc index
-          :mmap mmap
-          :file-channel file-channel
-          :buff (Unpooled/wrappedBuffer ^ByteBuffer mmap)))
-      index)))
+    (cond
+      (> (+ bts-size (.capacity buff)) PAGE_SIZE)           ;safety check that we never overflow the current buffer
+      (throw (RuntimeException. (str "The bts-size[ " bts-size " ] + buff.capacity[ " (.capacity buff) " ] cannot be bigger than PAGE_SIZE[ "  PAGE_SIZE " ]")))
+      (>= bts-size (- (.capacity buff) (relative-pos position-pointer)))
+      (let [mmap (.map file-channel FileChannel$MapMode/READ_WRITE 0 (within-page-size (+ (* 10 bts-size) (.capacity buff))))]
+        (assoc-in
+          (assoc index2 :file-channel file-channel)
+          [:pages (calc-page pos)]
+          [(Unpooled/wrappedBuffer ^ByteBuffer mmap) mmap]))
+      :else index2)))
 
 (defn- write-case-one
   "If k < min, overwrite current min with k and re-insert min"
-  [{:keys [^ByteBuf buff] :as index} pos k data-id]
-  (let [curr-min-data (read-min-data buff pos)
+  [index pos k data-id]
+  (let [[^ByteBuf buff index2] (get-page-buff index pos)
+        curr-min-data (read-min-data buff pos)
         v-min (read-min buff pos)]
     (write-min buff pos k)
     (write-min-data buff pos data-id)
-    (_insert! index 10 v-min curr-min-data)))
+    (_insert! index2 10 v-min curr-min-data)))
 
-(defn- write-case-two [{:keys [^ByteBuf buff] :as index} pos k data-id]
-  (write-min buff pos k)
-  (write-max buff pos k)
-  (write-min-data buff pos data-id)
-  index)
+(defn- write-case-two [index pos k data-id]
+  (let [[^ByteBuf buff index2] (get-page-buff index pos)]
+    (write-min buff pos k)
+    (write-max buff pos k)
+    (write-min-data buff pos data-id)
+    index2))
 
-(defn- write-case-three [{:keys [^ByteBuf buff ^Long u] :as index} pos k data-id]
-  (let [u (read-u buff pos)
+(defn- boundy-aware-position-pointer
+  "If the pointer's relative pos + size does not fit within the page, a pointer will be returned to the next
+   starting point of the next page, otherwise the same pointer is returned"
+  [pointer ^Long size]
+  (let [rel-pos (relative-pos pointer)]
+    (if (> (+ rel-pos size) PAGE_SIZE) (+ pointer (- PAGE_SIZE rel-pos)) pointer)))
+
+(defn- write-case-three [index pos k data-id]
+  (let [[buff index2] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        u (read-u buff rel-pos)
         child-u (vutils/upper-sqrt u)
         i (vutils/high u k)
         low (vutils/low u k)
-        position-pointer (read-position-pointer buff)
-        updated-pointer (+
-                          position-pointer
-                          (node-byte-size child-u))
-        index2 (check-child-capacity index pos position-pointer)]
+        node-bts (node-byte-size child-u)
+        position-pointer (boundy-aware-position-pointer (read-index-position-pointer index2) node-bts)
+        updated-pointer (+ position-pointer node-bts)
+        [child-buff index3] (get-page-buff (check-child-capacity index pos position-pointer) position-pointer) ;get the buff to insert the child
+
+        ]
     (prn "case3 position-pointer: " position-pointer)
-    ;
-    ;(veb/write-node buff position-pointer {:u child-u :min k :max 5 :min-data 6})
-    ;(veb/write-cluster-ref buff pos i position-pointer -1)
-    ;(veb/write-position-pointer buff updated-pointer)
 
-    (write-node (:buff index2) position-pointer {:u child-u :min low :max low :min-data data-id})
-    (write-cluster-ref (:buff index2) pos i position-pointer -1)
-    (write-position-pointer (:buff index2) updated-pointer)
-    index2))
+    (write-node child-buff (relative-pos position-pointer) {:u child-u :min low :max low :min-data data-id})
+    (write-cluster-ref buff rel-pos i position-pointer -1)
+    (write-index-position-pointer index3 updated-pointer)
+    index3))
 
-(defn- write-case-four [{:keys [buff] :as index} pos k data-id]
-  (let [u (read-u buff pos)]
-    ;(prn "case-four u " u " k " k " low " (vutils/low u k) "; high " (vutils/high u k) " read-cluster-ref " (read-cluster-ref buff pos (vutils/high u k)))
-    (_insert! index
-              (read-protected-cluster-ref buff pos u (vutils/high u k))   ;get the next position from the cluster-ref
-              (vutils/low u k)                              ;change k to low
+(defn- write-case-four [index pos k data-id]
+  (let [[buff index2] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        u (read-u buff rel-pos)]
+    (_insert! index2
+              (read-cluster-ref buff rel-pos (vutils/high u k))   ;get the next position from the cluster-ref
+              (vutils/low u k)                                      ;change k to low
               data-id)))
 
-(defn- write-case-five [{:keys [buff]} pos k data-id]
-  (let [v-max (read-max buff pos)]
+(defn- write-case-five [index pos k data-id]
+  (let [[buff index2] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        v-max (read-max buff rel-pos)]
     ;note this expects u == 2 and v-min > -1
     (if (> k v-max)
       (do
-        (write-max buff pos k)
-        (write-max-data buff pos data-id))
-      (throw (Exception. (str "No space in index for u " (read-u buff pos) " pos " pos " k " k))))))
+        (write-max buff rel-pos k)
+        (write-max-data buff rel-pos data-id)
+        index2)
+      (throw (Exception. (str "No space in index for u " (read-u buff rel-pos) " pos " pos " k " k))))))
 
-(defn _insert! [{:keys [^ByteBuf buff] :as index} ^Long pos ^Long k ^Long data-id]
-  (let [^Long v-min (try
-                      (read-min buff pos)
-                      (catch Exception e (do
-                                           (prn "k " k  "; u " (try (read-u pos) (catch Exception e nil)))
-                                           (throw e)
-                                           )))
-        ^Long u (read-u buff pos)]
-    (prn "pos " pos " k " k " v-min " v-min  " u " u)
+(defn _insert! [index ^Long pos ^Long k ^Long data-id]
+  (let [[buff index2] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        ^Long v-min (read-min buff rel-pos)
+        ^Long u (read-u buff rel-pos)]
+
     (cond
       (= -1 v-min)
-      (write-case-two index pos k data-id)
+      (write-case-two index2 pos k data-id)
       (< k v-min)
-      (write-case-one index pos k data-id)
+      (write-case-one index2 pos k data-id)
       :else
       (if (> u 2)
         (cond
-          (= -1 (do
-                  (prn "investigate: u: " u  " k: " k  " high; " (vutils/high u k) " sqrt " (vutils/veb-sqrt u))
-                  ;here u 6 k 4 and high 2 upper-sqrt returns 2 instead of 3
-                  (read-protected-cluster-ref buff pos u (vutils/high u k))))
-          (write-case-three index pos k data-id)
+          (= -1 (read-cluster-ref buff rel-pos (vutils/high u k)))
+          (write-case-three index2 pos k data-id)
           :else
-          (write-case-four index pos k data-id))
-        (write-case-five index pos k data-id)))))
+          (write-case-four index2 pos k data-id))
+        (write-case-five index2 pos k data-id)))))
 
 
-(defn v-insert! [index k data-id]
-  (assert (and (number? k) (number? data-id)))
-  (if (< k (read-u (:buff index) 10))
+(defn v-insert!
+  "Insert k with data data-id into the index and returns the new index"
+  [index k data-id]
+  (if (and (number? k) (number? data-id) (< k (read-u (first (get-page-buff index 0)) 10)))
     (_insert! index 10 k data-id)
-    (throw (IllegalArgumentException. (str "k [" k "] must be < u " (read-u (:buff index) 10))))))
+    (throw (IllegalArgumentException. (str "k [" k "] must be < u " (read-u (first (get-page-buff index 0)) 10))))))
 
-(defn- _v-get [{:keys [buff] :as index} ^Long pos ^Long k]
-  (let [v-min (read-min buff pos)
-        v-max (read-max buff pos)
-        u (read-u buff pos)]
+(defn- _v-get [index ^Long pos ^Long k]
+  (let [[buff _] (get-page-buff index pos)
+        rel-pos (relative-pos pos)
+        v-min (read-min buff rel-pos)
+        v-max (read-max buff rel-pos)
+        u (read-u buff rel-pos)]
     (cond
       (= k v-min)
-      (read-min-data buff pos)
+      (read-min-data buff rel-pos)
       (= k v-max)
-      (read-max-data buff pos)
+      (read-max-data buff rel-pos)
       (> k v-min)
-      (let [^Long pos2 (read-cluster-ref buff pos (vutils/high u k))]
+      (let [^Long pos2 (read-cluster-ref buff rel-pos (vutils/high u k))]
         (when (> pos2 -1)
           (_v-get index pos2 (vutils/low u k)))))))
 
 (defn v-get
   "Returns the data-id at value k if it exists, otherwise nil"
   [index k]
-  (when (and k (< k (read-u (:buff index) 10)))
+  (when (and k (< k (read-u (first (get-page-buff index 0)) 10)))
     (_v-get index 10 k)))
+
+
+(defn max-number-of-bytes
+  "Calculates the max number of bytes a tree will use"
+  [u]
+  (let [x (vutils/upper-sqrt u)]
+    (if (> x 2) (+ (node-byte-size x) (* x (max-number-of-bytes x)))
+                (node-byte-size 2))))

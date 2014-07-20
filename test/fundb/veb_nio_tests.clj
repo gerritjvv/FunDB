@@ -22,7 +22,7 @@
          (prop/for-all [n (gen/such-that #(and (> % 4) (< % 31)) gen/nat)]
                        (let [u 36                           ;works with 35
                              buff (Unpooled/buffer (* 5 1000000))
-                             index {:buff buff :u u}]
+                             index {:pages {0 [buff nil]} :u u}]
 
                          ;create header and root node
                          (veb/write-header buff)
@@ -32,7 +32,7 @@
                          (veb/write-position-pointer buff (+ 10 (veb/node-byte-size u)))
 
                          ;start inserting root not position is at 10
-                         (dotimes [i 37]
+                         (dotimes [i 36]
                            (veb/v-insert! index i (+ 10 i)))
 
                          (dotimes [i u]
