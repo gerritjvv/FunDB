@@ -18,9 +18,9 @@
 
 ;;@TODO use index load and check autosizing
 (defspec check-inserts-no-file
-         1
-         (prop/for-all [n gen/nat]
-                       (let [u 32
+         10
+         (prop/for-all [n (gen/such-that #{16 32 36} gen/nat)]
+                       (let [u n
                              buff (Unpooled/buffer (* 5 1000000))
                              index {:pages {0 [buff nil]} :u u}]
 
@@ -38,7 +38,7 @@
                          (dotimes [i u]
                            (prn "read: " i " = " (veb/v-get index i)))
 
-                         true
+                         (all-true? (map (partial veb/v-get index) (range u)))
 
                          )))
 
