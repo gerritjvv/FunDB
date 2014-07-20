@@ -12,5 +12,5 @@
           (prop/for-all [n gen/nat]
                         (let [dir (str "target/test/test-create-load-db-def/" n)]
                           (create-db "mydb" dir)
-                          (= (load-db-def dir)  {:name "mydb", :tables []})
+                          (= (dissoc (load-db-def dir) :file :dir)  {:name "mydb", :tables []})
                           )))
