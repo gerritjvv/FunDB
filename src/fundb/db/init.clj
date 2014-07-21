@@ -3,17 +3,18 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [fundb.db.index.nio.veb :as veb])
-  (:import [java.io File]))
+  (:import [java.io File RandomAccessFile]))
 
 
 (defn- load-indexes [indexes]
-  (reduce (fn [state [name {:keys [type file]}]]
-            (assoc name {:type type :data (veb/load-index file)})) ))
+  (into {}
+        (for [[name {:keys [type file]}] indexes]
+          [name {:type type :data (veb/load-index file)}])))
 
 (defn- load-table
   "Loads a table and its indexes into memory"
-  [{:keys [name dir]}]
-  (let [d (edn/read-string (slurp (str dir "/.table-" name)))]
+  [file]
+  (let [d (edn/read-string (slurp file))]
     (assoc d
       :indexes (load-indexes (:indexes d)))))
 
@@ -25,14 +26,10 @@
     (assoc d
       :dir path
       :file (.getAbsolutePath f)
-      :tables (map load-table (:tables d)))))
+      :tables (into {} (map
+                         (fn [x] [(:name x) x])
+                         (map load-table (:tables d)))))))
 
-(defn load-db-meta
-  "Acceps a directory and returns a table definition"
-  [path]
-  (let [^File def-file (io/as-file (str path "/.fundb"))]
-    (if (.exists def-file)
-      (load-db-def def-file))))
 
 (defn create-db [db-name path]
   (let [^File def-file (io/as-file (str path "/.fundb"))]
@@ -44,15 +41,28 @@
   (create-db db-name path)
   (load-db-def path))
 
+(defn- update-db-add-table [{:keys [dir file]} table-name def-file]
+  (let [channel (-> (RandomAccessFile. (io/file file) "rw") .getChannel)
+        lock (.lock channel)
+       ]
+      (try
+        (let [db-def (edn/read-string (slurp file))]
+          (spit file (assoc db-def :tables (conj (:tables db-def) (-> def-file io/file .getAbsolutePath)))))
+        (finally (.release lock)))))
+
 (defn create-table [{:keys [dir file] :as db-def} table-name]
   (let [^File def-file (io/as-file (str dir "/" table-name "/.table-" table-name))
         index-file  (str dir "/" table-name "/.index-" table-name)]
-    (if-not (.exists def-file)
-      (do
-        (veb/create-index Integer/MAX_VALUE)
-        (io/make-parents def-file)
-        (spit def-file {:name table-name :dir (str dir "/" table-name) :indexes [:type :veb :file index-file]})
-        (let [db-def2 (assoc db-def :tables (conj (:tables db-def) (.getAbsolutePath def-file)))]
-          (spit file db-def2)
-          db-def2))
-      db-def)))
+    (when-not (.exists def-file)
+      (veb/create-index index-file Integer/MAX_VALUE)
+      (io/make-parents def-file)
+      (spit def-file {:name table-name :dir (str dir "/" table-name) :indexes {"primary" {:type :veb :file index-file}}})
+      (update-db-add-table db-def table-name def-file)
+      )))
+
+(defn get-table [db-def table-name]
+  (-> db-def :tables (get table-name)))
+
+
+(defn get-primary-index [db-def table-name]
+  (-> db-def :tables (get table-name) :indexes (get "primary")))

@@ -337,7 +337,7 @@
    if not the file is resized and a new buffer is created"
   [{:keys [pages ^FileChannel file-channel] :as index} pos ^Long position-pointer]
   ;(prn " >>>>>>>>>>>>>>>>> increase capacity")
-  (let [[buff index2] (get-page-buff index pos)
+  (let [[^ByteBuf buff index2] (get-page-buff index pos)
         rel-pos (relative-pos pos)
         u (read-u buff rel-pos)
         child-u (vutils/upper-sqrt u)
@@ -398,7 +398,7 @@
    belong to the same page"
   [index u parent-pos child-pos]
   (let [[buff index2] (get-page-buff index parent-pos)
-        [child-buff index2] (get-page-buff index child-pos)]
+        [^ByteBuf child-buff index2] (get-page-buff index child-pos)]
     (if (>= (relative-pos child-pos) (.capacity child-buff))
       (increase-buff-capacity index child-buff child-pos (node-byte-size u))
       index)))
