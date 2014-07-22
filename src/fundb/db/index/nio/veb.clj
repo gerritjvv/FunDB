@@ -570,7 +570,7 @@
     (_successor index 10 k)))
 
 (defn v-successor-seq [index k]
-  (take-while (complement nil?) (iterate (partial v-successor index) k)))
+  (drop 1 (take-while (complement nil?) (iterate (partial v-successor index) k))))
 
 (defn v-data-seq [index k]
   (map (partial v-get index) (v-successor-seq index k)))
