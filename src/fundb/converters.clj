@@ -2,7 +2,11 @@
   (:import
     [io.netty.buffer ByteBuf Unpooled]
     [fundb.utils BytesUtil]
-    [java.nio ByteBuffer]))
+    [java.nio ByteBuffer]
+    ))
+
+(defprotocol FromBytes
+  (from-bytes [x] "Converts x a bytearray to the type expected"))
 
 (defprotocol TComparable
   (compareTo [a b] "Return -1 if a is smaller than b, 0 if a == b and 1 if a > b"))
@@ -12,7 +16,6 @@
 
 (defprotocol ToByteBuffer
   (to-bytebuffer [x] "Converts x to a java nio ByteBuffer"))
-
 
 (defprotocol ToByteArray
   (to-bytearray [x] "Converts x to a java byte array"))
@@ -79,11 +82,12 @@
   (to-bytebuffer [x] (to-bytebuffer (to-bytearray x)))
 
   ToByteArray
-  (to-bytearray [x] (BytesUtil/toArray (long x))))
+  (to-bytearray [x] (BytesUtil/toArray (long x)))
 
+  FromBytes
+  (from-bytes [^"[B" x]
+    (BytesUtil/toLong x)))
 
-
-
-
-
-
+(extend-type String
+  ToByteArray
+  (to-bytearray [^String x] (.getBytes x)))

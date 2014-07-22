@@ -2,7 +2,8 @@
   "Load database and table definitions into memory"
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [fundb.db.index.nio.veb :as veb])
+            [fundb.db.index.nio.veb :as veb]
+            [clojure.tools.logging :refer [error info]])
   (:import [java.io File RandomAccessFile]))
 
 
@@ -16,15 +17,17 @@
   [file]
   (let [d (edn/read-string (slurp file))]
     (assoc d
-      :indexes (load-indexes (:indexes d)))))
+      :indexes (ref (load-indexes (:indexes d))))))
 
 (defn load-db-def
   "Loads a database and its tables into memory"
   [^File path]
-  (let [^File f (io/as-file (str path "/.fundb"))
+  (let [isFile (= (.getName path) ".fundb")
+        ^File f (if isFile path (io/as-file (str path "/.fundb")))
+
         d (edn/read-string (slurp f))]
     (assoc d
-      :dir path
+      :dir (if isFile (.getParent path) path)
       :file (.getAbsolutePath f)
       :tables (into {} (map
                          (fn [x] [(:name x) x])
@@ -66,3 +69,17 @@
 
 (defn get-primary-index [db-def table-name]
   (-> db-def :tables (get table-name) :indexes (get "primary")))
+
+(defn- safe-load-db-def [path]
+  (try
+    (load-db-def path)
+    (catch Exception e (error e (str "Error loading db " path)))))
+
+(defn load-dbs
+  "Search the path structure for .fundb files and load each db"
+  [path]
+  (let [dbs (filter (fn [^File f] (= (.getName f) ".fundb")) (-> path io/file file-seq))]
+    (into {}
+          (map (fn [{:keys [name] :as db}] [name db])
+               (filter (complement nil?)
+                       (map safe-load-db-def dbs))))))

@@ -472,7 +472,7 @@
   [index k data-id]
   (if (and (number? k) (number? data-id) (< k (read-u (first (get-page-buff index 0)) 10)))
     (_insert! index 10 k data-id)
-    (throw (IllegalArgumentException. (str "k [" k "] must be < u " (read-u (first (get-page-buff index 0)) 10))))))
+    (throw (IllegalArgumentException. (str "data-id must be a number and is: " (type data-id) " and k [" k "] must be < u " (read-u (first (get-page-buff index 0)) 10))))))
 
 (defn- _v-get [index ^Long pos ^Long k]
   (let [[buff _] (get-page-buff index pos)
