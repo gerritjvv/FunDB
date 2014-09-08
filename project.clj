@@ -10,11 +10,16 @@
                  [org.apache.hadoop/hadoop-common "2.2.0"]
                  [io.netty/netty-buffer "4.0.19.Final"]
                  [com.taoensso/nippy "2.6.3"]
+		             [rhizome "0.2.1"]
+                 [criterium "0.4.3" :scope "provided"]
                  [org.clojure/test.check "0.5.7" :scope "test"]
 		 [org.clojure/tools.trace "0.7.8" :scope "provided"]]
+
+  :plugins [[perforate "0.3.3"]]
 
   :javac-options ["-target" "1.6" "-source" "1.6" "-Xlint:-options"]
   :global-vars {*warn-on-reflection* true
                 *assert* false}
 
-  :java-source-paths ["java"] )
+  :java-source-paths ["java"]
+  :perforate {:benchmark-paths ["bench/"]})
