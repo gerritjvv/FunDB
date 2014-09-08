@@ -67,7 +67,7 @@
 
 (defn find-data
   "Find a key and its data using log log u time"
-  [{:keys [u min max cluster summary] :as m} x]
+  [{:keys [^long u ^long min ^long max cluster summary] :as m} ^long x]
 
   (cond
     (or (< x (:v min)) (> x (:v max)))
@@ -76,7 +76,7 @@
     min
     (= x (:v max))
     max
-    :ele
+    :else
     (let [x-high (high u x)
           x-low (low u x)
           c (cluster x-high)]
