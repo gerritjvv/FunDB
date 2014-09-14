@@ -1,17 +1,8 @@
 (ns fundb.veb
   (:require [fundb.veb-utils :refer :all]
             [fundb.hashes :refer [o-hash]])
+  (:import [fundb.utils BytesUtil])
   (:use [clojure.core :exclude [min max]]))
-
-;IMPORTANT: only works for u values 2^4, 2^24 and 2^32
-;The vEB tree structure is represented by nodes that each are represented by a map.
-;The keys for the map are:
-;u ;the universe size
-;min a map with the minimum stored as :v
-;max a map with the maximum stored as :v
-;summary the summary vector pointing to vEB node structures
-;cluster the cluster vector pointing to vEB node structures
-;if u is 2 then this is a base case and the keys summary and cluster are not represent
 
 (def MAX_U 2147483646)
 
@@ -67,22 +58,18 @@
 
 (defn find-data
   "Find a key and its data using log log u time"
-  [{:keys [^long u ^long min ^long max cluster summary] :as m} ^long x]
-
+  [{:keys [^long u min max cluster summary] :as m} ^Long x]
   (cond
-    (or (< x (:v min)) (> x (:v max)))
-    nil
-    (= x (:v min))
+    (= x ^long (:v min))
     min
-    (= x (:v max))
+    (= x ^long (:v max))
     max
+    (or (< x ^long (:v min)) (> x ^long (:v max)))
+    nil
     :else
-    (let [x-high (high u x)
-          x-low (low u x)
-          c (cluster x-high)]
-      (if c
-        (find-data c x-low)
-        m))))
+    (if-let [c (cluster (high u x))]
+      (recur c (low u x))
+      m)))
 
 
 
@@ -136,6 +123,7 @@
       (if (> u-root 2)
         {:u u-root :min data-m :max data-m :summary {:u (upper-sqrt u-root) :cluster {}} :cluster {}}
         {:u u-root :min data-m :max data-m}))))
+
 
 (defn- add-to-cluster [v x cx]
   (assoc-in v [:cluster x] cx))
@@ -193,7 +181,7 @@
     The order preserving hash of k is used as the internal key, and :keys #{k} is assoced to data.
   "
   [v k data]
-  (insert1 v (o-hash k) (assoc data :keys #{k})))
+  (insert1 v k (assoc data :keys #{k})))
 
 
 (defn create-tree

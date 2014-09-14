@@ -12,6 +12,7 @@
                  [com.taoensso/nippy "2.6.3"]
 		             [rhizome "0.2.1"]
                  [criterium "0.4.3" :scope "provided"]
+                 [cupboard "1.0beta1" :scope "provided"]
                  [org.clojure/test.check "0.5.7" :scope "test"]
 		 [org.clojure/tools.trace "0.7.8" :scope "provided"]]
 

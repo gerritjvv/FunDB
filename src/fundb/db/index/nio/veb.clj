@@ -203,7 +203,7 @@
   (let [u (read-u buff pos)]
     (if (or (zero? i) (< 0 i (Math/ceil (vutils/veb-sqrt u))))
       (.getInt buff (+ pos 8 8 8 8 8 1 (* i 6)))
-      (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= u < " (vutils/upper-sqrt u)))))))
+      (throw (IndexOutOfBoundsException. (str "The cluster index " i " is not in range 0 <= [" u "]  < " (vutils/veb-sqrt u)))))))
 
 (defn ^ByteBuf write-cluster-ref
   "Write a cluster's ref and file index
@@ -407,13 +407,16 @@
   (let [[buff index2] (get-page-buff index pos)
         rel-pos (relative-pos pos)
         u (read-u buff rel-pos)
-        _ (do (prn "u: " u " k: " k))
         child-pos (read-cluster-ref buff rel-pos (vutils/high u k))]
 
-    (_insert! (check-buff-loaded index2 u pos child-pos)
-              child-pos   ;get the next position from the cluster-ref
-              (vutils/low u k)                                      ;change k to low
-              data-id)))
+    (try
+      (_insert! (check-buff-loaded index2 u pos child-pos)
+                child-pos   ;get the next position from the cluster-ref
+                (vutils/low u k)                                      ;change k to low
+                data-id)
+      (catch Exception e (do
+
+                           (throw (RuntimeException. (str "page " (calc-page pos) " u " u " k " k " low " (vutils/low u k)  " e (" e ")" ))))))))
 
 (defn- write-case-five [index pos k data-id]
   (let [[buff index2] (get-page-buff index pos)
@@ -469,8 +472,8 @@
 
 (defn v-insert!
   "Insert k with data data-id into the index and returns the new index"
-  [index k data-id]
-  (if (and (number? k) (number? data-id) (< k (read-u (first (get-page-buff index 0)) 10)))
+  [index k data-id]                                         ;(< k (read-u (first (get-page-buff index 0)) 10))
+  (if (and (number? k) (number? data-id) )
     (_insert! index 10 k data-id)
     (throw (IllegalArgumentException. (str "data-id must be a number and is: " (type data-id) " and k [" k "] must be < u " (read-u (first (get-page-buff index 0)) 10))))))
 
@@ -494,6 +497,7 @@
 (defn v-get
   "Returns the data-id at value k if it exists, otherwise nil"
   [index k]
+
   (when (and k (< k (read-u (first (get-page-buff index 0)) 10)))
     (_v-get index 10 k)))
 

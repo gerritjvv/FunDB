@@ -57,7 +57,7 @@
   (let [^File def-file (io/as-file (str dir "/" table-name "/.table-" table-name))
         index-file  (str dir "/" table-name "/.index-" table-name)]
     (when-not (.exists def-file)
-      (veb/create-index index-file Integer/MAX_VALUE)
+      (veb/create-index index-file (long (Math/pow 2 47)))
       (io/make-parents def-file)
       (spit def-file {:name table-name :dir (str dir "/" table-name) :indexes {"primary" {:type :veb :file index-file}}})
       (update-db-add-table db-def table-name def-file)

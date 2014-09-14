@@ -61,17 +61,21 @@
         ^"[B" bts (to-bytearray v)]
 
     (assert (not (nil? indexes)))
-
+    ;(prn ">>> v-insert!: " k)
     (write ape "data"
            (fn [{:keys [^DataOutputStream out future-file-name] :as file-data}]
              (.writeInt out (count bts))
              (.write out bts 0 (count bts))
              (let [i (.get ^AtomicLong (:record-counter file-data))] ;get teh recor counter value at insert
                (dosync (alter indexes (fn [indexes-m]
+                                        ;(prn "indexes-m " indexes-m)
+                                        ;(prn "extracted: " (get indexes-m "primary") )
                                         (try
-                                          (assoc indexes-m
-                                            "primary" (v-insert! (:data (get indexes-m "primary")) k (extract-ts future-file-name)))
-                                          (catch Exception e (.printStackTrace e)))))))))))
+                                          (assoc-in indexes-m
+                                            ["primary" :data] (v-insert! (:data (get indexes-m "primary")) k (extract-ts future-file-name)))
+                                          (catch Exception e (do
+                                                               ;(.printStackTrace e)
+                                                               indexes-m)))))))))))
 
 
 (comment
@@ -82,5 +86,5 @@
   (write-table db-writer "mytable" 1 "abc")
 
   (def i (-> db-writer :tables (get "mytable") :indexes deref (get "primary")))
-  (v-get i 1)
+  (v-get (:data i) 1)
   )

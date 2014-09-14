@@ -42,4 +42,14 @@ public class BytesUtil {
         return hexEncode(s.getBytes(), new StringBuilder()).toString();
     }
 
+    public static final int compare(int a, int b){
+        int c = a - b;
+        return (c >> 31) & 1 ^ 1;
+    }
+
+    public static long unsignedDiff(long a, long b) {
+        long mask = 0xFFFFFFFFL;
+        return (( ((a >> 32) & mask) - ((b >> 32) & mask) ) << 32) +
+                + ((a & mask) - (b & mask));
+    }
 }

@@ -1,0 +1,22 @@
+This is a test message full of just text for testing
+Gerrrits-MacBook-Pro:FunDB gvanvuuren$ lein perforate
+======================
+Reflection warning, perforate/core.clj:13:8 - reference to field hashCode can't be resolved.
+Reflection warning, perforate/core.clj:13:22 - reference to field hashCode can't be resolved.
+log4j:WARN No appenders could be found for logger (io.netty.util.internal.logging.InternalLoggerFactory).
+log4j:WARN Please initialize the log4j system properly.
+log4j:WARN See http://logging.apache.org/log4j/1.2/faq.html#noconfig for more info.
+Benchmarking the following goals: 
+veb-disk-bench kjfkdjfkjdlsafjdslkfjlsdkjfds
+dsakfjdslkjfdklsjfalkdsjfldksjfkldsjflkdsjfkldsjflkdsjfklds
+dakfljdslkfjdsl
+se initialize the log4j system properly.
+log4j:WARN See http://logging.apache.org/log4j/1.2/faq.html#noconfig for more info.
+Benchmarking the following goals:
+veb-disk-bench kjfkdjfkjdlsafjdslkfjlsdkjfds
+dsakfjdslkjfdklsjfalkdsjfldksjfkldsjflkdsjfkldsjflkdsjfklds
+dakfljdslkfjdsl
+e following goals:
+veb-disk-bench kjfkdjfkjdlsafjdslkfjlsdkjfds
+dsakfjdslkjfdklsjfalkdsjfldksjfkldsjflkdsjfkldsjflkdsjfklds
+dakfljdslkfjdsl
